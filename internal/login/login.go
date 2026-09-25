@@ -277,16 +277,19 @@ func browserPath(lc config.Login) string {
 	candidates := []string{
 		lc.BrowserPath,
 		os.Getenv("DS2API_BROWSER"),
-		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
-		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+		// Edge first (DeepSider extension lives in Edge), Chrome as fallback.
 		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
 		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
+		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+		"/usr/bin/microsoft-edge",
+		"/usr/bin/microsoft-edge-stable",
 		"/usr/bin/google-chrome",
 		"/usr/bin/google-chrome-stable",
 		"/usr/bin/chromium",
 		"/usr/bin/chromium-browser",
-		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 		"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 	}
 	for _, c := range candidates {
 		if c == "" {
