@@ -5,13 +5,17 @@
 package login
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -226,43 +230,11 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 	}
 	defer os.RemoveAll(dir)
 
-	opts := []chromedp.ExecAllocatorOption{
-		chromedp.UserDataDir(dir),
-		chromedp.Flag("headless", false),
-		chromedp.Flag("no-first-run", true),
-		chromedp.Flag("no-default-browser-check", true),
-		chromedp.Flag("disable-popup-blocking", true),
-		chromedp.WindowSize(1120, 840),
+	runCtx, cleanup, err := launchEdge(ctx, lc, dir)
+	if err != nil {
+		return Result{}, err
 	}
-	if lc.ExtensionPath != "" {
-		opts = append(opts,
-			chromedp.Flag("disable-extensions-except", lc.ExtensionPath),
-			chromedp.Flag("load-extension", lc.ExtensionPath),
-		)
-	}
-	if path := browserPath(lc); path != "" {
-		opts = append(opts, chromedp.ExecPath(path))
-	}
-
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
-	defer cancelAlloc()
-
-	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
-	defer cancelBrowser()
-
-	log.Printf("[login] 启动浏览器…")
-	if err := chromedp.Run(browserCtx); err != nil {
-		return Result{}, fmt.Errorf("启动浏览器失败: %w", err)
-	}
-
-	// An incognito session is a dedicated browser context. It can only be
-	// created once the browser itself is initialized, hence the two stages.
-	runCtx := browserCtx
-	if lc.Incognito {
-		newCtx, cancelNew := chromedp.NewContext(browserCtx, chromedp.WithNewBrowserContext())
-		defer cancelNew()
-		runCtx = newCtx
-	}
+	defer cleanup()
 
 	if err := chromedp.Run(runCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
@@ -296,6 +268,113 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 				r.Token = strings.TrimSpace(r.Token)
 				r.RefreshToken = strings.TrimSpace(r.RefreshToken)
 				return r, nil
+			}
+		}
+	}
+}
+
+type browserVersion struct {
+	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+}
+
+// launchEdge starts Edge itself and then attaches chromedp through its CDP
+// endpoint. chromedp's built-in Windows launcher can leave a visible Edge
+// window on about:blank while failing to attach, hence this explicit path.
+func launchEdge(ctx context.Context, lc config.Login, userDataDir string) (context.Context, func(), error) {
+	browser := browserPath(lc)
+	if browser == "" {
+		return nil, nil, fmt.Errorf("未找到 Edge；请在 login.browser_path 指定 msedge.exe")
+	}
+
+	port, err := availablePort()
+	if err != nil {
+		return nil, nil, fmt.Errorf("分配 Edge 调试端口失败: %w", err)
+	}
+
+	args := []string{
+		"--remote-debugging-address=127.0.0.1",
+		fmt.Sprintf("--remote-debugging-port=%d", port),
+		"--remote-allow-origins=*",
+		"--user-data-dir=" + userDataDir,
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--disable-popup-blocking",
+		"--new-window",
+		"about:blank",
+	}
+	if lc.Incognito {
+		args = append(args, "--inprivate")
+	}
+	if lc.ExtensionPath != "" {
+		args = append(args,
+			"--disable-extensions-except="+lc.ExtensionPath,
+			"--load-extension="+lc.ExtensionPath,
+		)
+	}
+
+	cmd := exec.CommandContext(ctx, browser, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return nil, nil, fmt.Errorf("启动 Edge 失败: %w", err)
+	}
+
+	cleanup := func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	}
+
+	log.Printf("[login] 已启动 Edge%s，正在连接浏览器…", map[bool]string{true: " 隐私窗口", false: ""}[lc.Incognito])
+	wsURL, err := waitForCDP(ctx, port)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("Edge 调试连接失败: %w；stderr: %s", err, truncate(stderr.String(), 500))
+	}
+
+	allocCtx, cancelAlloc := chromedp.NewRemoteAllocator(ctx, wsURL)
+	runCtx, cancelRun := chromedp.NewContext(allocCtx)
+	return runCtx, func() {
+		cancelRun()
+		cancelAlloc()
+		cleanup()
+	}, nil
+}
+
+func availablePort() (int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port, nil
+}
+
+func waitForCDP(ctx context.Context, port int) (string, error) {
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/json/version", port)
+	client := &http.Client{Timeout: time.Second}
+	deadline := time.NewTimer(12 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(150 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-deadline.C:
+			return "", fmt.Errorf("12 秒内没有出现 CDP 端点 %s", endpoint)
+		case <-ticker.C:
+			resp, err := client.Get(endpoint)
+			if err != nil {
+				continue
+			}
+			var version browserVersion
+			err = json.NewDecoder(resp.Body).Decode(&version)
+			resp.Body.Close()
+			if err == nil && version.WebSocketDebuggerURL != "" {
+				return version.WebSocketDebuggerURL, nil
 			}
 		}
 	}
