@@ -3,73 +3,136 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DeepSider2API 管理面板</title>
+<title>DeepSider2API</title>
 <style>
   :root{
-    --bg:#0f1218; --panel:#161b24; --panel2:#1d2430; --line:#26303e;
-    --text:#e6edf3; --muted:#8b98a9; --brand:#4f8cff; --ok:#2ecc71;
-    --warn:#f5a623; --err:#ff5c5c;
+    --glass: rgba(255,255,255,.07);
+    --stroke: rgba(255,255,255,.16);
+    --stroke-strong: rgba(255,255,255,.30);
+    --text:#eef3fb; --muted:#a4b4cc;
+    --brand:#7fb0ff; --ok:#5ee6a8; --warn:#ffd166; --err:#ff8fa3;
+    --shadow: 0 16px 48px rgba(3,7,18,.5);
+    --blur: blur(24px) saturate(180%);
+    --radius: 20px;
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;
+    background:#060912; overflow-x:hidden;
+  }
+  /* colourful blurred blobs behind the glass */
+  body::before{
+    content:""; position:fixed; inset:-25%; z-index:-2;
+    background:
+      radial-gradient(38% 38% at 16% 20%, rgba(99,102,241,.60), transparent 62%),
+      radial-gradient(34% 34% at 84% 16%, rgba(236,72,153,.45), transparent 62%),
+      radial-gradient(42% 42% at 74% 84%, rgba(34,211,238,.42), transparent 62%),
+      radial-gradient(40% 40% at 18% 82%, rgba(16,185,129,.34), transparent 62%);
+    filter: blur(50px);
+  }
+  body::after{
+    content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:
+      radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,.10), transparent 55%),
+      linear-gradient(180deg, rgba(6,9,18,.10), rgba(6,9,18,.55));
+  }
   a{color:var(--brand);text-decoration:none}
-  .layout{display:flex;min-height:100vh}
-  .sidebar{width:210px;background:var(--panel);border-right:1px solid var(--line);padding:18px 12px;flex-shrink:0}
-  .brand{font-weight:700;font-size:16px;padding:6px 10px 16px;display:flex;align-items:center;gap:8px}
-  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--brand);box-shadow:0 0 10px var(--brand)}
-  .nav a{display:block;padding:10px 12px;border-radius:8px;color:var(--muted);margin-bottom:4px;font-size:14px;cursor:pointer}
-  .nav a.active,.nav a:hover{background:var(--panel2);color:var(--text)}
-  .main{flex:1;padding:24px 28px;overflow:auto}
-  h1{font-size:20px;margin:0 0 18px}
-  h2{font-size:15px;margin:22px 0 10px;color:var(--muted);font-weight:600}
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-  .card .v{font-size:24px;font-weight:700;margin-top:6px}
-  .card .k{font-size:12px;color:var(--muted)}
-  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--line)}
-  th{color:var(--muted);font-weight:600;background:var(--panel2)}
-  tr:last-child td{border-bottom:none}
-  .btn{background:var(--brand);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
-  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
-  .btn.danger{background:transparent;border:1px solid var(--err);color:var(--err)}
-  .btn.sm{padding:5px 10px;font-size:12px}
-  input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .glass{
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.02) 46%),
+      var(--glass);
+    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+    border:1px solid var(--stroke); border-radius:var(--radius);
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 0 rgba(255,255,255,.05);
+  }
+  .layout{display:flex;min-height:100vh;padding:18px;gap:18px}
+  .sidebar{width:214px;flex-shrink:0;padding:18px 14px;display:flex;flex-direction:column;position:sticky;top:18px;height:calc(100vh - 36px)}
+  .brand{font-weight:800;font-size:16px;padding:4px 10px 18px;display:flex;align-items:center;gap:10px;letter-spacing:.3px}
+  .brand .dot{width:11px;height:11px;border-radius:50%;background:linear-gradient(140deg,#8ec5ff,#c084fc);box-shadow:0 0 14px rgba(140,180,255,.9), inset 0 1px 0 rgba(255,255,255,.6)}
+  .nav{display:flex;flex-direction:column;gap:6px}
+  .nav a{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:14px;color:var(--muted);font-size:14px;cursor:pointer;border:1px solid transparent;transition:.18s}
+  .nav a:hover{color:var(--text);background:rgba(255,255,255,.06);border-color:var(--stroke)}
+  .nav a.active{color:#fff;background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.06));border-color:var(--stroke-strong);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 8px 22px rgba(0,0,0,.28)}
+  .main{flex:1;min-width:0;padding:8px 6px}
+  h1{font-size:22px;margin:2px 0 20px;font-weight:750;letter-spacing:.3px}
+  h2{font-size:13px;margin:26px 0 12px;color:var(--muted);font-weight:600;letter-spacing:.6px;text-transform:uppercase}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
+  .card{padding:18px;position:relative;overflow:hidden}
+  .card .k{font-size:12px;color:var(--muted);letter-spacing:.4px}
+  .card .v{font-size:27px;font-weight:780;margin-top:8px;text-shadow:0 2px 18px rgba(120,160,255,.35)}
+  .card::after{content:"";position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(140,180,255,.28),transparent 70%)}
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+  .tablewrap{padding:6px;overflow:hidden}
+  th,td{text-align:left;padding:12px 14px}
+  th{color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase}
+  tbody tr{background:rgba(255,255,255,.03);transition:.15s}
+  tbody tr:nth-child(even){background:rgba(255,255,255,.055)}
+  tbody tr:hover{background:rgba(255,255,255,.11)}
+  tbody td:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
+  tbody td:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;
+    background:linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.06));
+    border:1px solid var(--stroke-strong); color:var(--text);
+    border-radius:12px; padding:9px 15px; font-size:13px; cursor:pointer;
+    backdrop-filter: blur(12px) saturate(160%); -webkit-backdrop-filter: blur(12px) saturate(160%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 6px 18px rgba(0,0,0,.28);
+    transition:.16s; font-weight:600;
+  }
+  .btn:hover{transform:translateY(-1px);background:linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.1))}
+  .btn:active{transform:translateY(0)}
+  .btn.primary{background:linear-gradient(180deg, rgba(127,176,255,.62), rgba(127,176,255,.28));border-color:rgba(170,205,255,.65)}
+  .btn.ghost{background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.28)}
+  .btn.danger{background:linear-gradient(180deg, rgba(255,143,163,.4), rgba(255,143,163,.14));border-color:rgba(255,143,163,.55);color:#ffdbe2}
+  .btn.sm{padding:6px 11px;font-size:12px;border-radius:10px}
+  input,select,textarea{
+    background:rgba(255,255,255,.06); border:1px solid var(--stroke); color:var(--text);
+    border-radius:12px; padding:10px 13px; font-size:13px; width:100%; outline:none;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18); transition:.16s;
+  }
+  input:focus{border-color:rgba(170,205,255,.7);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 0 0 3px rgba(127,176,255,.18)}
+  input::placeholder{color:#7f8ea6}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
   .row>*{flex:0 0 auto}
-  .row .grow{flex:1 1 200px}
-  .pill{padding:2px 9px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
-  .pill.ok{color:var(--ok);border-color:var(--ok)}
+  .row .grow{flex:1 1 220px}
+  .pill{padding:3px 11px;border-radius:999px;font-size:11px;border:1px solid var(--stroke);background:rgba(255,255,255,.06);white-space:nowrap;display:inline-block}
+  .pill.ok{color:var(--ok);border-color:rgba(94,230,168,.5);box-shadow:0 0 12px rgba(94,230,168,.22) inset}
   .pill.off{color:var(--muted)}
-  .pill.warn{color:var(--warn);border-color:var(--warn)}
-  .pill.err{color:var(--err);border-color:var(--err)}
+  .pill.warn{color:var(--warn);border-color:rgba(255,209,102,.5)}
+  .pill.err{color:var(--err);border-color:rgba(255,143,163,.5)}
   .muted{color:var(--muted)}
-  .section{display:none}
+  .section{display:none;animation:fade .25s ease}
   .section.active{display:block}
-  #login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50}
-  #login .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;width:340px}
-  #login h2{color:var(--text);margin:0 0 14px}
-  pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;max-height:360px}
-  .logline{font-family:Consolas,monospace;font-size:12px;padding:3px 0;border-bottom:1px dashed var(--line)}
-  .logline .lv{display:inline-block;width:52px}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(6px)}
+  #login .box{padding:30px;width:360px}
+  #login h2{color:var(--text);margin:0 0 6px;font-size:20px;font-weight:750;text-transform:none;letter-spacing:0}
+  pre{background:rgba(0,0,0,.28);border:1px solid var(--stroke);border-radius:12px;padding:12px;overflow:auto;font-size:12px;max-height:360px}
+  .logline{font-family:Consolas,monospace;font-size:12px;padding:6px 10px;border-radius:10px;margin-bottom:4px;background:rgba(255,255,255,.035)}
+  .logline .lv{display:inline-block;width:54px;font-weight:700}
   .lv.info{color:var(--brand)} .lv.warn{color:var(--warn)} .lv.error{color:var(--err)}
-  .toast{position:fixed;right:20px;bottom:20px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 16px;font-size:13px;opacity:0;transition:.3s;z-index:99}
-  .toast.show{opacity:1}
+  .toast{position:fixed;right:24px;bottom:24px;padding:13px 18px;font-size:13px;opacity:0;transform:translateY(10px);transition:.28s;z-index:99;pointer-events:none}
+  .toast.show{opacity:1;transform:none}
+  code{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:6px;font-size:12px}
+  .sidefoot{margin-top:auto;padding-top:14px}
 </style>
 </head>
 <body>
 <div id="login">
-  <div class="box">
-    <h2>DeepSider2API</h2>
-    <p class="muted" style="font-size:13px;margin:0 0 12px">输入管理密钥（config.json 的 api_key）</p>
+  <div class="box glass">
+    <div class="brand" style="padding:0 0 14px"><span class="dot"></span> DeepSider2API</div>
+    <p class="muted" style="font-size:13px;margin:0 0 14px">输入管理密钥（config.json 的 api_key）</p>
     <input id="loginKey" type="password" placeholder="管理密钥" />
     <div style="height:12px"></div>
-    <button class="btn" style="width:100%" onclick="doLogin()">登录</button>
+    <button class="btn primary" style="width:100%;justify-content:center" onclick="doLogin()">登 录</button>
   </div>
 </div>
 
 <div class="layout" id="app" style="display:none">
-  <aside class="sidebar">
+  <aside class="sidebar glass">
     <div class="brand"><span class="dot"></span> DeepSider2API</div>
     <nav class="nav">
       <a data-tab="dashboard" class="active">📊 仪表盘</a>
@@ -79,16 +142,14 @@
       <a data-tab="logs">📝 日志</a>
       <a data-tab="config">⚙️ 配置</a>
     </nav>
-    <div style="position:absolute;bottom:16px">
-      <button class="btn ghost sm" onclick="logout()">退出登录</button>
-    </div>
+    <div class="sidefoot"><button class="btn ghost sm" style="width:100%;justify-content:center" onclick="logout()">退出登录</button></div>
   </aside>
   <main class="main">
     <section class="section active" id="tab-dashboard">
       <h1>仪表盘</h1>
       <div class="cards" id="statCards"></div>
       <h2>按模型统计</h2>
-      <table id="modelStats"><thead><tr><th>模型</th><th>请求数</th></tr></thead><tbody></tbody></table>
+      <div class="tablewrap glass"><table id="modelStats"><thead><tr><th>模型</th><th>请求数</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="section" id="tab-accounts">
@@ -96,56 +157,58 @@
       <div class="row">
         <input class="grow" id="accName" placeholder="备注名（可选）" />
         <input class="grow" id="accToken" placeholder="DeepSider JWT（Bearer 后的 token）" />
-        <button class="btn" onclick="addAccount()">添加账号</button>
+        <button class="btn primary" onclick="addAccount()">添加账号</button>
       </div>
-      <table id="accTable">
+      <div class="tablewrap glass"><table id="accTable">
         <thead><tr><th>名称</th><th>邮箱</th><th>积分</th><th>套餐</th><th>状态</th><th>失败</th><th>操作</th></tr></thead>
         <tbody></tbody>
-      </table>
+      </table></div>
     </section>
 
     <section class="section" id="tab-keys">
       <h1>API 密钥</h1>
       <div class="row">
         <input class="grow" id="keyName" placeholder="密钥名称" />
-        <button class="btn" onclick="createKey()">生成密钥</button>
+        <button class="btn primary" onclick="createKey()">生成密钥</button>
       </div>
-      <table id="keyTable">
+      <div class="tablewrap glass"><table id="keyTable">
         <thead><tr><th>名称</th><th>前缀</th><th>用量</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
         <tbody></tbody>
-      </table>
+      </table></div>
     </section>
 
     <section class="section" id="tab-models">
       <h1>模型列表</h1>
-      <button class="btn ghost sm" onclick="loadModels()">刷新</button>
-      <table id="modelTable"><thead><tr><th>botId</th><th>名称</th><th>类型</th><th>积分</th></tr></thead><tbody></tbody></table>
+      <div class="row"><button class="btn ghost" onclick="loadModels()">刷新</button></div>
+      <div class="tablewrap glass"><table id="modelTable"><thead><tr><th>botId</th><th>名称</th><th>类型</th><th>积分</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="section" id="tab-logs">
       <h1>运行日志</h1>
       <div class="row">
-        <button class="btn ghost sm" onclick="loadLogs()">刷新</button>
-        <button class="btn danger sm" onclick="clearLogs()">清空</button>
+        <button class="btn ghost" onclick="loadLogs()">刷新</button>
+        <button class="btn danger" onclick="clearLogs()">清空</button>
       </div>
       <div id="logBox"></div>
     </section>
 
     <section class="section" id="tab-config">
       <h1>配置</h1>
-      <div class="row"><span class="muted" style="width:120px">监听地址</span><input class="grow" id="cfgListen" /></div>
-      <div class="row"><span class="muted" style="width:120px">管理密钥</span><input class="grow" id="cfgApiKey" /></div>
-      <h2>模型编排（auto）</h2>
-      <div class="row"><label><input type="checkbox" id="cfgAutoEnabled" style="width:auto"> 启用 auto 虚拟模型</label></div>
-      <div class="row"><span class="muted" style="width:120px">白天主模型</span><input class="grow" id="cfgDayPrimary" /></div>
-      <div class="row"><span class="muted" style="width:120px">夜间主模型</span><input class="grow" id="cfgNightPrimary" /></div>
-      <div class="row"><span class="muted" style="width:120px">白天时段</span><input id="cfgDayStart" style="width:70px" /> <span class="muted">-</span> <input id="cfgDayEnd" style="width:70px" /></div>
-      <div class="row"><span class="muted" style="width:120px">降级链</span><input class="grow" id="cfgFallback" placeholder="逗号分隔" /></div>
-      <button class="btn" onclick="saveConfig()">保存配置</button>
+      <div class="tablewrap glass" style="padding:18px">
+        <div class="row"><span class="muted" style="width:120px">监听地址</span><input class="grow" id="cfgListen" /></div>
+        <div class="row"><span class="muted" style="width:120px">管理密钥</span><input class="grow" id="cfgApiKey" /></div>
+        <h2 style="margin-top:6px">模型编排（auto）</h2>
+        <div class="row"><label class="muted"><input type="checkbox" id="cfgAutoEnabled" style="width:auto"> 启用 auto 虚拟模型</label></div>
+        <div class="row"><span class="muted" style="width:120px">白天主模型</span><input class="grow" id="cfgDayPrimary" /></div>
+        <div class="row"><span class="muted" style="width:120px">夜间主模型</span><input class="grow" id="cfgNightPrimary" /></div>
+        <div class="row"><span class="muted" style="width:120px">白天时段</span><input id="cfgDayStart" style="width:80px" /> <span class="muted">—</span> <input id="cfgDayEnd" style="width:80px" /></div>
+        <div class="row"><span class="muted" style="width:120px">降级链</span><input class="grow" id="cfgFallback" placeholder="逗号分隔" /></div>
+        <button class="btn primary" onclick="saveConfig()">保存配置</button>
+      </div>
     </section>
   </main>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast glass" id="toast"></div>
 
 <script>
 let KEY = localStorage.getItem('ds2api_key') || '';
@@ -162,7 +225,7 @@ function api(path, opts={}){
   });
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function fmtTime(t){ if(!t||t.startsWith('0001')) return '-'; return new Date(t).toLocaleString(); }
+function fmtTime(t){ if(!t||String(t).startsWith('0001')) return '-'; return new Date(t).toLocaleString(); }
 
 function doLogin(){
   KEY = $('#loginKey').value.trim();
@@ -193,7 +256,7 @@ function loadStats(){
       ['总请求',d.total_requests],['成功',d.success_requests],['失败',d.failed_requests],
       ['字符数',d.total_tokens],['账号数',d.accounts],['密钥数',d.keys],['运行秒',d.uptime_seconds]
     ];
-    $('#statCards').innerHTML=cards.map(c=>`<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]||0}</div></div>`).join('');
+    $('#statCards').innerHTML=cards.map(c=>`<div class="card glass"><div class="k">${c[0]}</div><div class="v">${c[1]||0}</div></div>`).join('');
     const rows=Object.entries(d.per_model||{}).sort((a,b)=>b[1]-a[1]);
     $('#modelStats tbody').innerHTML=rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${r[1]}</td></tr>`).join('')||'<tr><td colspan="2" class="muted">暂无数据</td></tr>';
   }).catch(e=>toast('加载失败: '+e.message));

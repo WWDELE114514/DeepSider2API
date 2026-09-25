@@ -114,7 +114,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/panel/logs", s.admin(s.handleLogs))
 	s.mux.HandleFunc("DELETE /api/panel/logs", s.admin(s.handleClearLogs))
 
-	s.mux.HandleFunc("GET /", s.handleIndex)
+	s.mux.HandleFunc("GET /panel", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/panel/", http.StatusMovedPermanently)
+	})
+	s.mux.HandleFunc("GET /panel/", s.handlePanel)
+	s.mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/panel/", http.StatusFound)
+	})
 }
 
 func (s *Server) bearer(r *http.Request) string {
@@ -176,11 +182,7 @@ func setCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type")
 }
 
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
+func (s *Server) handlePanel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(panelHTML)
 }

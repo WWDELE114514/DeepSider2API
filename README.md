@@ -13,7 +13,7 @@
 - **多账号池**：多个 DeepSider JWT 轮询、失败冷却熔断、积分/套餐状态刷新。
 - **API 密钥分发**：面板签发 `sk-...` 子密钥，可停用 / 删除，仅存 SHA-256。
 - **模型编排**：虚拟模型 `auto` 按昼夜自动切换主模型，并支持递归降级链 `model_fallback`（深度 ≤3、长度 ≤8）。
-- **Web 管理面板**：仪表盘、账号池、密钥、模型列表、运行日志、在线改配置。
+- **Web 管理面板**：仪表盘、账号池、密钥、模型列表、运行日志、在线改配置（液态玻璃风格，地址 `/panel/`）。
 - **签名复用**：直接复用 DeepSider 扩展的 `sign_wasm`（wasm-bindgen + wazero），生成 `i-sign`，无需逆向哈希算法。
 - **零配置构建**：GitHub Actions 自动构建 Docker 镜像与 Windows 单文件。
 
@@ -32,7 +32,7 @@ cp config.example.json config/config.json
 docker compose up -d
 ```
 
-浏览器打开 `http://<你的机器IP>:7863/`，用 `api_key` 登录面板，在「账号池」添加 DeepSider token。
+浏览器打开 `http://<你的机器IP>:7863/panel/`，用 `api_key` 登录面板，在「账号池」添加 DeepSider token。
 
 ### 获取 DeepSider token
 
