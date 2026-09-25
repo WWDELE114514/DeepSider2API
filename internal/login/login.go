@@ -247,16 +247,7 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancelAlloc()
 
-	var browserCtx context.Context
-	var cancelBrowser context.CancelFunc
-	if lc.Incognito {
-		// A dedicated incognito browser context is the reliable way to get a
-		// private session. Passing --incognito instead breaks chromedp's
-		// navigation (the window stays on about:blank).
-		browserCtx, cancelBrowser = chromedp.NewContext(allocCtx, chromedp.WithNewBrowserContext())
-	} else {
-		browserCtx, cancelBrowser = chromedp.NewContext(allocCtx)
-	}
+	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
 	defer cancelBrowser()
 
 	log.Printf("[login] 启动浏览器…")
@@ -264,7 +255,16 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 		return Result{}, fmt.Errorf("启动浏览器失败: %w", err)
 	}
 
-	if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+	// An incognito session is a dedicated browser context. It can only be
+	// created once the browser itself is initialized, hence the two stages.
+	runCtx := browserCtx
+	if lc.Incognito {
+		newCtx, cancelNew := chromedp.NewContext(browserCtx, chromedp.WithNewBrowserContext())
+		defer cancelNew()
+		runCtx = newCtx
+	}
+
+	if err := chromedp.Run(runCtx, chromedp.ActionFunc(func(ctx context.Context) error {
 		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
 		return err
 	})); err != nil {
@@ -272,7 +272,7 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 	}
 
 	log.Printf("[login] 打开登录页: %s", lc.Page)
-	if err := chromedp.Run(browserCtx, chromedp.Navigate(lc.Page)); err != nil {
+	if err := chromedp.Run(runCtx, chromedp.Navigate(lc.Page)); err != nil {
 		return Result{}, fmt.Errorf("打开登录页失败: %w", err)
 	}
 	log.Printf("[login] 登录页已打开，等待用户完成登录…")
@@ -285,7 +285,7 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 			return Result{}, fmt.Errorf("登录超时或已取消")
 		case <-ticker.C:
 			var raw string
-			evalCtx, cancelEval := context.WithTimeout(browserCtx, 5*time.Second)
+			evalCtx, cancelEval := context.WithTimeout(runCtx, 5*time.Second)
 			err := chromedp.Run(evalCtx, chromedp.Evaluate(`JSON.stringify(window.__DS2API_TOKEN__ || null)`, &raw))
 			cancelEval()
 			if err != nil || raw == "" || raw == "null" {
