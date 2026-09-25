@@ -9,9 +9,10 @@
 ## 特性
 
 - **OpenAI 兼容**：`GET /v1/models`、`POST /v1/chat/completions`（支持流式 SSE 与非流式）。
+- **多协议**：`POST /v1/messages`（Anthropic Messages，Claude Code 等）、`POST /v1/responses`（OpenAI Responses），与 chat 共用同一套账号池与调度。
 - **多账号池**：多个 DeepSider JWT 轮询、失败冷却熔断、积分/套餐状态刷新。
 - **API 密钥分发**：面板签发 `sk-...` 子密钥，可停用 / 删除，仅存 SHA-256。
-- **模型编排**：虚拟模型 `auto` 按昼夜自动切换主模型，并支持降级链（可选）。
+- **模型编排**：虚拟模型 `auto` 按昼夜自动切换主模型，并支持递归降级链 `model_fallback`（深度 ≤3、长度 ≤8）。
 - **Web 管理面板**：仪表盘、账号池、密钥、模型列表、运行日志、在线改配置。
 - **签名复用**：直接复用 DeepSider 扩展的 `sign_wasm`（wasm-bindgen + wazero），生成 `i-sign`，无需逆向哈希算法。
 - **零配置构建**：GitHub Actions 自动构建 Docker 镜像与 Windows 单文件。
@@ -64,6 +65,25 @@ curl http://localhost:7863/v1/chat/completions \
 ```
 
 `model` 填 DeepSider 的 `botId`（可在面板「模型」页查看），或使用虚拟模型 `auto`。
+
+### Anthropic Messages（Claude Code 等）
+
+```bash
+curl http://localhost:7863/v1/messages \
+  -H "Authorization: Bearer <你的密钥>" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model":"auto","max_tokens":1024,"messages":[{"role":"user","content":"你好"}]}'
+```
+
+### OpenAI Responses
+
+```bash
+curl http://localhost:7863/v1/responses \
+  -H "Authorization: Bearer <你的密钥>" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"auto","input":"你好"}'
+```
 
 ---
 

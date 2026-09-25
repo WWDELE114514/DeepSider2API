@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,11 @@ type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
 	Stream   bool          `json:"stream"`
+}
+
+type chatDelta struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
 }
 
 var shanghai = time.FixedZone("CST", 8*3600)
@@ -92,18 +98,54 @@ func (s *Server) resolveModel(model string) string {
 	return model
 }
 
+// modelChain resolves the requested model and expands its fallback chain
+// breadth first (depth <= 3, length <= 8, de-duplicated).
+func (s *Server) modelChain(model string) []string {
+	primary := s.resolveModel(model)
+	cfg := s.cfg.Get()
+
+	chain := []string{primary}
+	seen := map[string]bool{primary: true}
+	queue := []string{primary}
+
+	for depth := 0; depth < 3; depth++ {
+		if len(queue) == 0 || len(chain) >= 8 {
+			break
+		}
+		var next []string
+		for _, m := range queue {
+			for _, f := range cfg.ModelFallback[m] {
+				if f == "" || seen[f] {
+					continue
+				}
+				seen[f] = true
+				chain = append(chain, f)
+				next = append(next, f)
+				if len(chain) >= 8 {
+					break
+				}
+			}
+			if len(chain) >= 8 {
+				break
+			}
+		}
+		queue = next
+	}
+	return chain
+}
+
 func (s *Server) conversationBody(model, prompt string) map[string]interface{} {
 	return map[string]interface{}{
-		"model":                model,
-		"prompt":               prompt,
-		"chatResources":        []interface{}{},
-		"imageOptions":         map[string]interface{}{},
-		"webAccess":            "close",
-		"deepResearchEnable":   false,
-		"userParameters":       map[string]interface{}{},
-		"videos":               []interface{}{},
-		"audios":               []interface{}{},
-		"timezone":             "Asia/Shanghai",
+		"model":              model,
+		"prompt":             prompt,
+		"chatResources":      []interface{}{},
+		"imageOptions":       map[string]interface{}{},
+		"webAccess":          "close",
+		"deepResearchEnable": false,
+		"userParameters":     map[string]interface{}{},
+		"videos":             []interface{}{},
+		"audios":             []interface{}{},
+		"timezone":           "Asia/Shanghai",
 	}
 }
 
@@ -111,6 +153,64 @@ func randomID(prefix string) string {
 	buf := make([]byte, 12)
 	_, _ = rand.Read(buf)
 	return prefix + hex.EncodeToString(buf)
+}
+
+// runChat walks the model fallback chain and, for each model, the account pool.
+// Text deltas are forwarded to onDelta (may be nil). It returns the full text
+// and the model that ultimately served the request.
+func (s *Server) runChat(ctx context.Context, model string, messages []chatMessage, onDelta func(string) error) (string, string, error) {
+	prompt := buildPrompt(messages)
+	chain := s.modelChain(model)
+	attempts := s.maxAttempts()
+
+	var full strings.Builder
+	var lastErr error
+	usedModel := chain[0]
+
+	for _, m := range chain {
+		usedModel = m
+		body := s.conversationBody(m, prompt)
+		wroteAny := false
+
+		for i := 0; i < attempts; i++ {
+			acc, err := s.pool.Pick()
+			if err != nil {
+				lastErr = err
+				break
+			}
+			wroteAny = false
+			err = s.upstream.Conversation(ctx, acc.Token, body, func(ev upstream.Event) error {
+				if ev.Code == 202 {
+					var d chatDelta
+					if json.Unmarshal(ev.Data, &d) == nil && d.Type == "chat" && d.Content != "" {
+						full.WriteString(d.Content)
+						wroteAny = true
+						if onDelta != nil {
+							if derr := onDelta(d.Content); derr != nil {
+								return derr
+							}
+						}
+					}
+				}
+				if ev.Code == 1002 || ev.Code == 1003 || ev.Code == 2002 || ev.Code == 3004 {
+					return fmt.Errorf("deepsider code %d: %s", ev.Code, ev.Message)
+				}
+				return nil
+			})
+			if err == nil {
+				s.pool.MarkSuccess(acc.ID)
+				return full.String(), usedModel, nil
+			}
+			lastErr = err
+			if wroteAny {
+				// Response already partially delivered; cannot switch.
+				return full.String(), usedModel, err
+			}
+			s.pool.MarkFailure(acc.ID, err.Error())
+			s.stats.Log("warn", fmt.Sprintf("model=%s retry: %v", m, err))
+		}
+	}
+	return full.String(), usedModel, lastErr
 }
 
 func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -126,19 +226,14 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if req.Model == "" {
 		req.Model = "auto"
 	}
-
-	prompt := buildPrompt(req.Messages)
-	model := s.resolveModel(req.Model)
-	body := s.conversationBody(model, prompt)
-
 	if req.Stream {
-		s.streamChat(w, r, req, model, body)
+		s.streamChat(w, r, req)
 		return
 	}
-	s.collectChat(w, r, req, model, body)
+	s.collectChat(w, r, req)
 }
 
-func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, req chatRequest, model string, body map[string]interface{}) {
+func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, req chatRequest) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeOpenAIError(w, http.StatusInternalServerError, "streaming unsupported")
@@ -152,64 +247,31 @@ func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, req chatRequ
 
 	id := randomID("chatcmpl-")
 	created := time.Now().Unix()
+	reportModel := s.resolveModel(req.Model)
 
-	var contentLen int
-	var wroteAny bool
-	var lastErr error
-
-	attempts := s.maxAttempts()
-	for i := 0; i < attempts; i++ {
-		acc, err := s.pool.Pick()
-		if err != nil {
-			lastErr = err
-			break
-		}
-		wroteAny = false
-		err = s.upstream.Conversation(r.Context(), acc.Token, body, func(ev upstream.Event) error {
-			if ev.Code == 202 {
-				var d struct {
-					Type    string `json:"type"`
-					Content string `json:"content"`
-				}
-				if json.Unmarshal(ev.Data, &d) == nil && d.Type == "chat" && d.Content != "" {
-					s.writeChunk(w, id, created, model, d.Content, false)
-					contentLen += len(d.Content)
-					wroteAny = true
-					flusher.Flush()
-				}
-			}
-			if ev.Code == 1002 || ev.Code == 1003 || ev.Code == 2002 || ev.Code == 3004 {
-				return fmt.Errorf("deepsider code %d: %s", ev.Code, ev.Message)
-			}
-			return nil
-		})
-		if err == nil {
-			s.pool.MarkSuccess(acc.ID)
-			lastErr = nil
-			break
-		}
-		lastErr = err
-		if wroteAny {
-			break
-		}
-		s.pool.MarkFailure(acc.ID, err.Error())
-		s.stats.Log("warn", "stream retry: "+err.Error())
+	text, usedModel, err := s.runChat(r.Context(), req.Model, req.Messages, func(delta string) error {
+		s.writeChunk(w, id, created, reportModel, delta, false)
+		flusher.Flush()
+		return nil
+	})
+	if usedModel != "" {
+		reportModel = usedModel
 	}
 
-	if lastErr != nil && !wroteAny {
-		s.stats.Request(model, false, 0)
-		s.stats.Log("error", "chat failed: "+lastErr.Error())
-		s.writeChunk(w, id, created, model, "[error] "+lastErr.Error(), true)
+	if err != nil && text == "" {
+		s.stats.Request(reportModel, false, 0)
+		s.stats.Log("error", "chat failed: "+err.Error())
+		s.writeChunk(w, id, created, reportModel, "[error] "+err.Error(), true)
 		w.Write([]byte("data: [DONE]\n\n"))
 		flusher.Flush()
 		return
 	}
 
-	s.writeChunk(w, id, created, model, "", true)
+	s.writeChunk(w, id, created, reportModel, "", true)
 	w.Write([]byte("data: [DONE]\n\n"))
 	flusher.Flush()
-	s.stats.Request(model, true, int64(contentLen))
-	s.stats.Log("info", fmt.Sprintf("chat ok model=%s chars=%d", model, contentLen))
+	s.stats.Request(reportModel, true, int64(len(text)))
+	s.stats.Log("info", fmt.Sprintf("chat ok model=%s chars=%d", reportModel, len(text)))
 }
 
 func (s *Server) writeChunk(w http.ResponseWriter, id string, created int64, model, content string, done bool) {
@@ -236,59 +298,23 @@ func (s *Server) writeChunk(w http.ResponseWriter, id string, created int64, mod
 	w.Write([]byte("\n\n"))
 }
 
-func (s *Server) collectChat(w http.ResponseWriter, r *http.Request, req chatRequest, model string, body map[string]interface{}) {
-	var content strings.Builder
-	var lastErr error
-
-	attempts := s.maxAttempts()
-	for i := 0; i < attempts; i++ {
-		acc, err := s.pool.Pick()
-		if err != nil {
-			lastErr = err
-			break
-		}
-		content.Reset()
-		err = s.upstream.Conversation(r.Context(), acc.Token, body, func(ev upstream.Event) error {
-			if ev.Code == 202 {
-				var d struct {
-					Type    string `json:"type"`
-					Content string `json:"content"`
-				}
-				if json.Unmarshal(ev.Data, &d) == nil && d.Type == "chat" {
-					content.WriteString(d.Content)
-				}
-			}
-			if ev.Code == 1002 || ev.Code == 1003 || ev.Code == 2002 || ev.Code == 3004 {
-				return fmt.Errorf("deepsider code %d: %s", ev.Code, ev.Message)
-			}
-			return nil
-		})
-		if err == nil {
-			s.pool.MarkSuccess(acc.ID)
-			lastErr = nil
-			break
-		}
-		lastErr = err
-		s.pool.MarkFailure(acc.ID, err.Error())
-		s.stats.Log("warn", "collect retry: "+err.Error())
-	}
-
-	if lastErr != nil {
-		s.stats.Request(model, false, 0)
-		s.stats.Log("error", "chat failed: "+lastErr.Error())
-		writeOpenAIError(w, http.StatusBadGateway, lastErr.Error())
+func (s *Server) collectChat(w http.ResponseWriter, r *http.Request, req chatRequest) {
+	text, usedModel, err := s.runChat(r.Context(), req.Model, req.Messages, nil)
+	if err != nil && text == "" {
+		s.stats.Request(usedModel, false, 0)
+		s.stats.Log("error", "chat failed: "+err.Error())
+		writeOpenAIError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-
 	resp := map[string]interface{}{
 		"id":      randomID("chatcmpl-"),
 		"object":  "chat.completion",
 		"created": time.Now().Unix(),
-		"model":   model,
+		"model":   usedModel,
 		"choices": []map[string]interface{}{
 			{
 				"index":         0,
-				"message":       map[string]interface{}{"role": "assistant", "content": content.String()},
+				"message":       map[string]interface{}{"role": "assistant", "content": text},
 				"finish_reason": "stop",
 			},
 		},
@@ -300,8 +326,8 @@ func (s *Server) collectChat(w http.ResponseWriter, r *http.Request, req chatReq
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
-	s.stats.Request(model, true, int64(content.Len()))
-	s.stats.Log("info", fmt.Sprintf("chat ok model=%s chars=%d", model, content.Len()))
+	s.stats.Request(usedModel, true, int64(len(text)))
+	s.stats.Log("info", fmt.Sprintf("chat ok model=%s chars=%d", usedModel, len(text)))
 }
 
 func writeOpenAIError(w http.ResponseWriter, status int, message string) {
