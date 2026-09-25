@@ -70,6 +70,7 @@ type Login struct {
 	Enabled        bool   `json:"enabled"`
 	Page           string `json:"page"`
 	BrowserPath    string `json:"browser_path"`
+	ExtensionPath  string `json:"extension_path"`
 	TimeoutSeconds int    `json:"timeout_seconds"`
 	Incognito      bool   `json:"incognito"`
 }

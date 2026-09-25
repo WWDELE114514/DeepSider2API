@@ -41,6 +41,7 @@
     "enabled": true,
     "page": "https://web.deepsider.online",
     "browser_path": "",
+    "extension_path": "",
     "timeout_seconds": 300,
     "incognito": true
   }

@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -203,17 +204,19 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 	}
 	defer os.RemoveAll(dir)
 
-	opts := append([]chromedp.ExecAllocatorOption{},
+	opts := []chromedp.ExecAllocatorOption{
 		chromedp.UserDataDir(dir),
 		chromedp.Flag("headless", false),
 		chromedp.Flag("no-first-run", true),
 		chromedp.Flag("no-default-browser-check", true),
-		chromedp.Flag("disable-extensions", true),
 		chromedp.Flag("disable-popup-blocking", true),
 		chromedp.WindowSize(1120, 840),
-	)
-	if lc.Incognito {
-		opts = append(opts, chromedp.Flag("incognito", true))
+	}
+	if lc.ExtensionPath != "" {
+		opts = append(opts,
+			chromedp.Flag("disable-extensions-except", lc.ExtensionPath),
+			chromedp.Flag("load-extension", lc.ExtensionPath),
+		)
 	}
 	if path := browserPath(lc); path != "" {
 		opts = append(opts, chromedp.ExecPath(path))
@@ -221,23 +224,30 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancelAlloc()
-	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
+
+	var browserCtx context.Context
+	var cancelBrowser context.CancelFunc
+	if lc.Incognito {
+		// A dedicated incognito browser context is the reliable way to get a
+		// private session. Passing --incognito instead breaks chromedp's
+		// navigation (the window stays on about:blank).
+		browserCtx, cancelBrowser = chromedp.NewContext(allocCtx, chromedp.WithNewBrowserContext())
+	} else {
+		browserCtx, cancelBrowser = chromedp.NewContext(allocCtx)
+	}
 	defer cancelBrowser()
 
-	if err := chromedp.Run(browserCtx); err != nil {
-		return Result{}, fmt.Errorf("启动浏览器失败: %w", err)
-	}
-
-	if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
-		return err
-	})); err != nil {
-		return Result{}, fmt.Errorf("注入脚本失败: %w", err)
-	}
-
-	if err := chromedp.Run(browserCtx, chromedp.Navigate(lc.Page)); err != nil {
+	log.Printf("[login] 启动浏览器并打开: %s", lc.Page)
+	if err := chromedp.Run(browserCtx,
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
+			return err
+		}),
+		chromedp.Navigate(lc.Page),
+	); err != nil {
 		return Result{}, fmt.Errorf("打开登录页失败: %w", err)
 	}
+	log.Printf("[login] 登录页已打开，等待用户完成登录…")
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()

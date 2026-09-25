@@ -107,7 +107,8 @@ curl http://localhost:7863/v1/responses \
 | `login.enabled` | 是否允许面板「登录获取账号」 |
 | `login.page` | 交互登录页地址（默认 `https://web.deepsider.online`） |
 | `login.browser_path` | 浏览器路径，留空自动探测 Chrome / Edge |
-| `login.incognito` | 是否无痕启动（默认 `true`） |
+| `login.extension_path` | 可选：DeepSider 扩展目录（用扩展登录页时填写，会 `--load-extension`） |
+| `login.incognito` | 是否使用独立隐身上下文（默认 `true`） |
 | `login.timeout_seconds` | 登录等待超时（默认 300 秒） |
 
 ---
