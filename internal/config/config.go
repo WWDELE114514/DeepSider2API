@@ -25,6 +25,7 @@ type Config struct {
 	AutoModel         AutoModel           `json:"auto_model"`
 	ModelFallback     map[string][]string `json:"model_fallback"`
 	SessionSticky     SessionSticky       `json:"session_sticky"`
+	Login             Login               `json:"login"`
 }
 
 // Upstream describes how to talk to DeepSider.
@@ -62,6 +63,17 @@ type SessionSticky struct {
 	TTL     string `json:"ttl"`
 }
 
+// Login configures the interactive account acquisition flow. The gateway opens
+// a real browser (incognito) at Page, the user signs in manually, and the
+// response of the login endpoint is captured to obtain the JWT.
+type Login struct {
+	Enabled        bool   `json:"enabled"`
+	Page           string `json:"page"`
+	BrowserPath    string `json:"browser_path"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+	Incognito      bool   `json:"incognito"`
+}
+
 // Default returns a configuration with sensible DeepSider defaults.
 func Default() Config {
 	return Config{
@@ -94,6 +106,12 @@ func Default() Config {
 		},
 		ModelFallback: map[string][]string{},
 		SessionSticky: SessionSticky{Enabled: true, TTL: "30m"},
+		Login: Login{
+			Enabled:        true,
+			Page:           "https://web.deepsider.online",
+			TimeoutSeconds: 300,
+			Incognito:      true,
+		},
 	}
 }
 
@@ -177,6 +195,12 @@ func (s *Store) normalizeLocked() {
 	}
 	if c.ModelFallback == nil {
 		c.ModelFallback = map[string][]string{}
+	}
+	if c.Login.Page == "" {
+		c.Login.Page = d.Login.Page
+	}
+	if c.Login.TimeoutSeconds <= 0 {
+		c.Login.TimeoutSeconds = d.Login.TimeoutSeconds
 	}
 }
 

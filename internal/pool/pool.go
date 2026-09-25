@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,6 +21,7 @@ type Account struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	Token         string    `json:"token"`
+	RefreshToken  string    `json:"refresh_token"`
 	Enabled       bool      `json:"enabled"`
 	Email         string    `json:"email"`
 	UID           string    `json:"uid"`
@@ -122,6 +124,11 @@ func newID() string {
 
 // Add inserts a new account.
 func (p *Pool) Add(name, token string) (*Account, error) {
+	return p.AddFull(name, token, "", "")
+}
+
+// AddFull inserts an account with refresh token and email metadata.
+func (p *Pool) AddFull(name, token, refreshToken, email string) (*Account, error) {
 	if token == "" {
 		return nil, errors.New("token is empty")
 	}
@@ -129,17 +136,43 @@ func (p *Pool) Add(name, token string) (*Account, error) {
 	defer p.mu.Unlock()
 
 	acc := &Account{
-		ID:        newID(),
-		Name:      name,
-		Token:     token,
-		Enabled:   true,
-		CreatedAt: time.Now(),
+		ID:           newID(),
+		Name:         name,
+		Token:        token,
+		RefreshToken: refreshToken,
+		Email:        email,
+		Enabled:      true,
+		CreatedAt:    time.Now(),
+	}
+	if acc.Name == "" && email != "" {
+		acc.Name = email
 	}
 	p.accounts = append(p.accounts, acc)
 	if err := p.saveLocked(); err != nil {
 		return nil, err
 	}
 	return acc, nil
+}
+
+// SetTokens replaces the token pair of an account (used after a refresh).
+func (p *Pool) SetTokens(id, token, refreshToken string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.accounts {
+		if a.ID == id {
+			if token != "" {
+				a.Token = token
+			}
+			if refreshToken != "" {
+				a.RefreshToken = refreshToken
+			}
+			a.FailCount = 0
+			a.LastError = ""
+			a.CooldownUntil = time.Time{}
+			_ = p.saveLocked()
+			return
+		}
+	}
 }
 
 // Remove deletes an account by id.
@@ -206,6 +239,21 @@ func (p *Pool) Get(id string) (Account, bool) {
 	defer p.mu.Unlock()
 	for _, a := range p.accounts {
 		if a.ID == id {
+			return *a, true
+		}
+	}
+	return Account{}, false
+}
+
+// FindByEmail returns the first account matching an email.
+func (p *Pool) FindByEmail(email string) (Account, bool) {
+	if email == "" {
+		return Account{}, false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, a := range p.accounts {
+		if strings.EqualFold(a.Email, email) {
 			return *a, true
 		}
 	}

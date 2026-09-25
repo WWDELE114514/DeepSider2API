@@ -215,6 +215,47 @@ func (c *Client) RetrieveProfile(ctx context.Context, token string) (Profile, er
 	return Profile{Email: parsed.Data.Email, UID: parsed.Data.UID}, nil
 }
 
+// TokenPair is the result of a refresh-token exchange.
+type TokenPair struct {
+	Token        string `json:"token"`
+	RefreshToken string `json:"refreshToken"`
+	Email        string `json:"email"`
+}
+
+// RefreshToken exchanges a refresh token for a fresh JWT.
+func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (TokenPair, error) {
+	base := c.nextBase()
+	payload, _ := json.Marshal(map[string]string{"refreshtoken": refreshToken})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/user/refreshtoken", bytes.NewReader(payload))
+	if err != nil {
+		return TokenPair{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range c.commonHeaders() {
+		req.Header.Set(k, v)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return TokenPair{}, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return TokenPair{}, &APIError{Status: resp.StatusCode, Body: string(raw)}
+	}
+	var parsed struct {
+		Code int       `json:"code"`
+		Data TokenPair `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return TokenPair{}, fmt.Errorf("decode refresh: %w", err)
+	}
+	if parsed.Code != 0 {
+		return TokenPair{}, &APIError{Status: resp.StatusCode, Code: parsed.Code, Body: string(raw)}
+	}
+	return parsed.Data, nil
+}
+
 // Event is one decoded SSE frame from the conversation endpoint.
 type Event struct {
 	Code      int             `json:"code"`

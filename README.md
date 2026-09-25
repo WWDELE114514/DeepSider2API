@@ -12,6 +12,8 @@
 - **多协议**：`POST /v1/messages`（Anthropic Messages，Claude Code 等）、`POST /v1/responses`（OpenAI Responses），与 chat 共用同一套账号池与调度。
 - **多账号池**：多个 DeepSider JWT 轮询、失败冷却熔断、积分/套餐状态刷新。
 - **API 密钥分发**：面板签发 `sk-...` 子密钥，可停用 / 删除，仅存 SHA-256。
+- **一键登录获取账号**：面板点「登录获取账号」→ 后台用 chromedp 打开**无痕**浏览器 → 你在官方登录页手动登录（Google / 邮箱）→ 自动拦截 `/user/login`、`/user/google-onetap-login` 响应抓取 `{token, refreshToken, email}` 并入池。登录页可配置（网页版或扩展页）。
+- **Token 自动刷新**：账号保存 `refreshToken`，可通过 `/user/refreshtoken` 续期。
 - **模型编排**：虚拟模型 `auto` 按昼夜自动切换主模型，并支持递归降级链 `model_fallback`（深度 ≤3、长度 ≤8）。
 - **Web 管理面板**：仪表盘、账号池、密钥、模型列表、运行日志、在线改配置（液态玻璃风格，地址 `/panel/`）。
 - **签名复用**：直接复用 DeepSider 扩展的 `sign_wasm`（wasm-bindgen + wazero），生成 `i-sign`，无需逆向哈希算法。
@@ -32,7 +34,9 @@ cp config.example.json config/config.json
 docker compose up -d
 ```
 
-浏览器打开 `http://<你的机器IP>:7863/panel/`，用 `api_key` 登录面板，在「账号池」添加 DeepSider token。
+浏览器打开 `http://<你的机器IP>:7863/panel/`，用 `api_key` 登录面板，点「登录获取账号」即可弹出无痕浏览器完成登录。
+
+> 「登录获取账号」依赖本机已安装 Chrome / Edge，并且服务运行在有图形界面的机器上（Docker 容器内默认不可用）。登录页在 `config.json` 的 `login.page` 配置，默认 `https://web.deepsider.online`；也可设为扩展登录页（此时建议 `login.incognito=false`）。
 
 ### 获取 DeepSider token
 
@@ -100,6 +104,11 @@ curl http://localhost:7863/v1/responses \
 | `pool.breaker_cooldown` | 冷却时长，如 `30m` |
 | `auto_model.enabled` | 是否启用 `auto` 虚拟模型昼夜切换 |
 | `auto_model.fallback` | 降级链（模型名数组） |
+| `login.enabled` | 是否允许面板「登录获取账号」 |
+| `login.page` | 交互登录页地址（默认 `https://web.deepsider.online`） |
+| `login.browser_path` | 浏览器路径，留空自动探测 Chrome / Edge |
+| `login.incognito` | 是否无痕启动（默认 `true`） |
+| `login.timeout_seconds` | 登录等待超时（默认 300 秒） |
 
 ---
 

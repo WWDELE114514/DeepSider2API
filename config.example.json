@@ -36,5 +36,12 @@
   "session_sticky": {
     "enabled": true,
     "ttl": "30m"
+  },
+  "login": {
+    "enabled": true,
+    "page": "https://web.deepsider.online",
+    "browser_path": "",
+    "timeout_seconds": 300,
+    "incognito": true
   }
 }

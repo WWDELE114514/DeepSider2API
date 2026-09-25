@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,17 @@ import (
 	"github.com/WWDELE114514/DeepSider2API/internal/server"
 	"github.com/WWDELE114514/DeepSider2API/internal/sign"
 )
+
+func panelURL(listen string) string {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return "http://" + listen + "/panel/"
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/panel/"
+}
 
 func main() {
 	configPath := flag.String("config", "config.json", "path to config.json")
@@ -43,8 +55,13 @@ func main() {
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 
+	panel := panelURL(store.Get().Listen)
+
 	go func() {
-		log.Printf("DeepSider2API listening on %s", store.Get().Listen)
+		log.Printf("DeepSider2API 已启动")
+		log.Printf("管理面板: %s", panel)
+		log.Printf("API 地址: %s/v1", panel[:len(panel)-len("/panel/")])
+		log.Printf("监听地址: %s", store.Get().Listen)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)
 		}

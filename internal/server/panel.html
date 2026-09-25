@@ -6,117 +6,101 @@
 <title>DeepSider2API</title>
 <style>
   :root{
-    --glass: rgba(255,255,255,.07);
-    --stroke: rgba(255,255,255,.16);
-    --stroke-strong: rgba(255,255,255,.30);
-    --text:#eef3fb; --muted:#a4b4cc;
-    --brand:#7fb0ff; --ok:#5ee6a8; --warn:#ffd166; --err:#ff8fa3;
-    --shadow: 0 16px 48px rgba(3,7,18,.5);
-    --blur: blur(24px) saturate(180%);
-    --radius: 20px;
+    --text:#1b2430; --muted:#68768c;
+    --brand:#3b82f6; --brand2:#60a5fa;
+    --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+    --shadow: 0 16px 42px rgba(30,45,80,.14);
+    --blur: blur(26px) saturate(180%);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
-    margin:0; color:var(--text);
+    margin:0; color:var(--text); overflow-x:hidden;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;
-    background:#060912; overflow-x:hidden;
-  }
-  /* colourful blurred blobs behind the glass */
-  body::before{
-    content:""; position:fixed; inset:-25%; z-index:-2;
     background:
-      radial-gradient(38% 38% at 16% 20%, rgba(99,102,241,.60), transparent 62%),
-      radial-gradient(34% 34% at 84% 16%, rgba(236,72,153,.45), transparent 62%),
-      radial-gradient(42% 42% at 74% 84%, rgba(34,211,238,.42), transparent 62%),
-      radial-gradient(40% 40% at 18% 82%, rgba(16,185,129,.34), transparent 62%);
-    filter: blur(50px);
+      radial-gradient(46% 42% at 10% 6%, #dbeafe, transparent 62%),
+      radial-gradient(42% 38% at 90% 10%, #fae8ff, transparent 62%),
+      radial-gradient(48% 46% at 82% 92%, #d1fae5, transparent 62%),
+      radial-gradient(44% 42% at 12% 90%, #e0e7ff, transparent 62%),
+      #eef3fa;
   }
   body::after{
     content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
-    background:
-      radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,.10), transparent 55%),
-      linear-gradient(180deg, rgba(6,9,18,.10), rgba(6,9,18,.55));
+    background:linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,0) 30%);
   }
   a{color:var(--brand);text-decoration:none}
   .glass{
-    background:
-      linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.02) 46%),
-      var(--glass);
-    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
-    border:1px solid var(--stroke); border-radius:var(--radius);
-    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 0 rgba(255,255,255,.05);
+    background:linear-gradient(180deg, rgba(255,255,255,.86), rgba(255,255,255,.56));
+    backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur);
+    border:1px solid rgba(255,255,255,.85); border-radius:20px;
+    box-shadow:var(--shadow), inset 0 1px 0 rgba(255,255,255,1);
   }
   .layout{display:flex;min-height:100vh;padding:18px;gap:18px}
-  .sidebar{width:214px;flex-shrink:0;padding:18px 14px;display:flex;flex-direction:column;position:sticky;top:18px;height:calc(100vh - 36px)}
+  .sidebar{width:216px;flex-shrink:0;padding:18px 14px;display:flex;flex-direction:column;position:sticky;top:18px;height:calc(100vh - 36px)}
   .brand{font-weight:800;font-size:16px;padding:4px 10px 18px;display:flex;align-items:center;gap:10px;letter-spacing:.3px}
-  .brand .dot{width:11px;height:11px;border-radius:50%;background:linear-gradient(140deg,#8ec5ff,#c084fc);box-shadow:0 0 14px rgba(140,180,255,.9), inset 0 1px 0 rgba(255,255,255,.6)}
+  .brand .dot{width:11px;height:11px;border-radius:50%;background:linear-gradient(140deg,#60a5fa,#a78bfa);box-shadow:0 0 14px rgba(96,165,250,.8), inset 0 1px 0 rgba(255,255,255,.9)}
   .nav{display:flex;flex-direction:column;gap:6px}
   .nav a{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:14px;color:var(--muted);font-size:14px;cursor:pointer;border:1px solid transparent;transition:.18s}
-  .nav a:hover{color:var(--text);background:rgba(255,255,255,.06);border-color:var(--stroke)}
-  .nav a.active{color:#fff;background:linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.06));border-color:var(--stroke-strong);box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 8px 22px rgba(0,0,0,.28)}
+  .nav a:hover{color:var(--text);background:rgba(255,255,255,.7);border-color:rgba(255,255,255,.9)}
+  .nav a.active{color:#fff;background:linear-gradient(180deg,#5b9dff,#3b82f6);border-color:#3b82f6;box-shadow:0 8px 22px rgba(59,130,246,.32), inset 0 1px 0 rgba(255,255,255,.5)}
   .main{flex:1;min-width:0;padding:8px 6px}
   h1{font-size:22px;margin:2px 0 20px;font-weight:750;letter-spacing:.3px}
   h2{font-size:13px;margin:26px 0 12px;color:var(--muted);font-weight:600;letter-spacing:.6px;text-transform:uppercase}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
   .card{padding:18px;position:relative;overflow:hidden}
   .card .k{font-size:12px;color:var(--muted);letter-spacing:.4px}
-  .card .v{font-size:27px;font-weight:780;margin-top:8px;text-shadow:0 2px 18px rgba(120,160,255,.35)}
-  .card::after{content:"";position:absolute;right:-30px;top:-30px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,rgba(140,180,255,.28),transparent 70%)}
+  .card .v{font-size:27px;font-weight:780;margin-top:8px;color:#16233b}
+  .card::after{content:"";position:absolute;right:-30px;top:-30px;width:96px;height:96px;border-radius:50%;background:radial-gradient(circle,rgba(96,165,250,.22),transparent 70%)}
   table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
   .tablewrap{padding:6px;overflow:hidden}
   th,td{text-align:left;padding:12px 14px}
   th{color:var(--muted);font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase}
-  tbody tr{background:rgba(255,255,255,.03);transition:.15s}
-  tbody tr:nth-child(even){background:rgba(255,255,255,.055)}
-  tbody tr:hover{background:rgba(255,255,255,.11)}
+  tbody tr{background:rgba(255,255,255,.55);transition:.15s}
+  tbody tr:nth-child(even){background:rgba(255,255,255,.8)}
+  tbody tr:hover{background:#fff}
   tbody td:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
   tbody td:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
   .btn{
     display:inline-flex;align-items:center;gap:6px;
-    background:linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.06));
-    border:1px solid var(--stroke-strong); color:var(--text);
-    border-radius:12px; padding:9px 15px; font-size:13px; cursor:pointer;
-    backdrop-filter: blur(12px) saturate(160%); -webkit-backdrop-filter: blur(12px) saturate(160%);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 6px 18px rgba(0,0,0,.28);
-    transition:.16s; font-weight:600;
+    background:linear-gradient(180deg,#ffffff,#f2f6fc);
+    border:1px solid rgba(255,255,255,.95); color:var(--text);
+    border-radius:12px; padding:9px 15px; font-size:13px; cursor:pointer; font-weight:600;
+    box-shadow:0 6px 16px rgba(30,45,80,.12), inset 0 1px 0 #fff; transition:.16s;
   }
-  .btn:hover{transform:translateY(-1px);background:linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.1))}
+  .btn:hover{transform:translateY(-1px);background:#fff}
   .btn:active{transform:translateY(0)}
-  .btn.primary{background:linear-gradient(180deg, rgba(127,176,255,.62), rgba(127,176,255,.28));border-color:rgba(170,205,255,.65)}
-  .btn.ghost{background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.28)}
-  .btn.danger{background:linear-gradient(180deg, rgba(255,143,163,.4), rgba(255,143,163,.14));border-color:rgba(255,143,163,.55);color:#ffdbe2}
+  .btn.primary{background:linear-gradient(180deg,#5b9dff,#3b82f6);color:#fff;border-color:#3b82f6;box-shadow:0 8px 20px rgba(59,130,246,.35), inset 0 1px 0 rgba(255,255,255,.5)}
+  .btn.ghost{background:rgba(255,255,255,.7)}
+  .btn.danger{background:linear-gradient(180deg,#fff,#ffecec);border-color:#ffd0d0;color:var(--err)}
   .btn.sm{padding:6px 11px;font-size:12px;border-radius:10px}
   input,select,textarea{
-    background:rgba(255,255,255,.06); border:1px solid var(--stroke); color:var(--text);
+    background:rgba(255,255,255,.78); border:1px solid rgba(15,23,42,.10); color:var(--text);
     border-radius:12px; padding:10px 13px; font-size:13px; width:100%; outline:none;
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.18); transition:.16s;
+    box-shadow:inset 0 1px 0 #fff; transition:.16s;
   }
-  input:focus{border-color:rgba(170,205,255,.7);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 0 0 3px rgba(127,176,255,.18)}
-  input::placeholder{color:#7f8ea6}
+  input:focus{border-color:rgba(59,130,246,.6);box-shadow:inset 0 1px 0 #fff,0 0 0 3px rgba(59,130,246,.16)}
+  input::placeholder{color:#9aa8bd}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
   .row>*{flex:0 0 auto}
   .row .grow{flex:1 1 220px}
-  .pill{padding:3px 11px;border-radius:999px;font-size:11px;border:1px solid var(--stroke);background:rgba(255,255,255,.06);white-space:nowrap;display:inline-block}
-  .pill.ok{color:var(--ok);border-color:rgba(94,230,168,.5);box-shadow:0 0 12px rgba(94,230,168,.22) inset}
+  .pill{padding:3px 11px;border-radius:999px;font-size:11px;border:1px solid rgba(15,23,42,.12);background:rgba(255,255,255,.8);white-space:nowrap;display:inline-block}
+  .pill.ok{color:var(--ok);border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.08)}
   .pill.off{color:var(--muted)}
-  .pill.warn{color:var(--warn);border-color:rgba(255,209,102,.5)}
-  .pill.err{color:var(--err);border-color:rgba(255,143,163,.5)}
+  .pill.warn{color:var(--warn);border-color:rgba(217,119,6,.35);background:rgba(217,119,6,.08)}
+  .pill.err{color:var(--err);border-color:rgba(220,38,38,.35);background:rgba(220,38,38,.08)}
   .muted{color:var(--muted)}
   .section{display:none;animation:fade .25s ease}
   .section.active{display:block}
   @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(6px)}
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(6px);background:rgba(238,243,250,.5)}
   #login .box{padding:30px;width:360px}
   #login h2{color:var(--text);margin:0 0 6px;font-size:20px;font-weight:750;text-transform:none;letter-spacing:0}
-  pre{background:rgba(0,0,0,.28);border:1px solid var(--stroke);border-radius:12px;padding:12px;overflow:auto;font-size:12px;max-height:360px}
-  .logline{font-family:Consolas,monospace;font-size:12px;padding:6px 10px;border-radius:10px;margin-bottom:4px;background:rgba(255,255,255,.035)}
+  .logline{font-family:Consolas,monospace;font-size:12px;padding:6px 10px;border-radius:10px;margin-bottom:4px;background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.9)}
   .logline .lv{display:inline-block;width:54px;font-weight:700}
   .lv.info{color:var(--brand)} .lv.warn{color:var(--warn)} .lv.error{color:var(--err)}
   .toast{position:fixed;right:24px;bottom:24px;padding:13px 18px;font-size:13px;opacity:0;transform:translateY(10px);transition:.28s;z-index:99;pointer-events:none}
   .toast.show{opacity:1;transform:none}
-  code{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:6px;font-size:12px}
+  code{background:rgba(59,130,246,.1);color:#1e40af;padding:1px 6px;border-radius:6px;font-size:12px}
   .sidefoot{margin-top:auto;padding-top:14px}
 </style>
 </head>
@@ -155,9 +139,13 @@
     <section class="section" id="tab-accounts">
       <h1>账号池</h1>
       <div class="row">
+        <button class="btn primary" onclick="startLogin()">🔓 登录获取账号</button>
+        <span id="loginStatus" class="muted" style="font-size:13px"></span>
+      </div>
+      <div class="row">
         <input class="grow" id="accName" placeholder="备注名（可选）" />
-        <input class="grow" id="accToken" placeholder="DeepSider JWT（Bearer 后的 token）" />
-        <button class="btn primary" onclick="addAccount()">添加账号</button>
+        <input class="grow" id="accToken" placeholder="或手动粘贴 DeepSider JWT" />
+        <button class="btn ghost" onclick="addAccount()">手动添加</button>
       </div>
       <div class="tablewrap glass"><table id="accTable">
         <thead><tr><th>名称</th><th>邮箱</th><th>积分</th><th>套餐</th><th>状态</th><th>失败</th><th>操作</th></tr></thead>
@@ -212,6 +200,7 @@
 
 <script>
 let KEY = localStorage.getItem('ds2api_key') || '';
+let loginPoll = null;
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
@@ -281,6 +270,21 @@ function loadAccounts(){
         </td></tr>`;
     }).join('')||'<tr><td colspan="7" class="muted">暂无账号</td></tr>';
   }).catch(e=>toast('加载失败: '+e.message));
+}
+function startLogin(){
+  api('/api/panel/login/start',{method:'POST'}).then(d=>{
+    $('#loginStatus').textContent='已打开无痕浏览器，请在其中完成登录…';
+    if(loginPoll) clearInterval(loginPoll);
+    loginPoll=setInterval(()=>{
+      api('/api/panel/login/status?id='+encodeURIComponent(d.id)).then(s=>{
+        if(s.status==='pending') return;
+        clearInterval(loginPoll); loginPoll=null;
+        if(s.status==='success'){ $('#loginStatus').textContent='✅ 登录成功：'+(s.email||''); toast('账号已添加'); loadAccounts(); }
+        else if(s.status==='cancelled'){ $('#loginStatus').textContent='已取消'; }
+        else { $('#loginStatus').textContent='❌ 失败：'+(s.error||'未知错误'); }
+      }).catch(()=>{});
+    }, 1500);
+  }).catch(e=>toast('启动失败: '+e.message));
 }
 function addAccount(){
   const name=$('#accName').value.trim(), token=$('#accToken').value.trim();

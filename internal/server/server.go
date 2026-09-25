@@ -14,6 +14,7 @@ import (
 
 	"github.com/WWDELE114514/DeepSider2API/internal/apikeys"
 	"github.com/WWDELE114514/DeepSider2API/internal/config"
+	"github.com/WWDELE114514/DeepSider2API/internal/login"
 	"github.com/WWDELE114514/DeepSider2API/internal/pool"
 	"github.com/WWDELE114514/DeepSider2API/internal/sign"
 	"github.com/WWDELE114514/DeepSider2API/internal/upstream"
@@ -29,6 +30,7 @@ type Server struct {
 	upstream *upstream.Client
 	pool     *pool.Pool
 	keys     *apikeys.Store
+	loginMgr *login.Manager
 	stats    *Stats
 	started  time.Time
 	mux      *http.ServeMux
@@ -59,6 +61,19 @@ func New(cfg *config.Store, signer *sign.Signer) (*Server, error) {
 		started:  time.Now(),
 		mux:      http.NewServeMux(),
 	}
+	s.loginMgr = login.New(cfg, func(res login.Result) error {
+		if existing, ok := p.FindByEmail(res.Email); ok {
+			p.SetTokens(existing.ID, res.Token, res.RefreshToken)
+			go s.refreshAccount(context.Background(), existing.ID)
+			return nil
+		}
+		acc, err := p.AddFull(res.Email, res.Token, res.RefreshToken, res.Email)
+		if err != nil {
+			return err
+		}
+		go s.refreshAccount(context.Background(), acc.ID)
+		return nil
+	})
 	s.routes()
 	return s, nil
 }
@@ -102,6 +117,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/panel/accounts/{id}/toggle", s.admin(s.handleToggleAccount))
 	s.mux.HandleFunc("DELETE /api/panel/accounts/{id}", s.admin(s.handleDeleteAccount))
 	s.mux.HandleFunc("POST /api/panel/accounts/{id}/refresh", s.admin(s.handleRefreshAccount))
+
+	s.mux.HandleFunc("POST /api/panel/login/start", s.admin(s.handleLoginStart))
+	s.mux.HandleFunc("GET /api/panel/login/status", s.admin(s.handleLoginStatus))
+	s.mux.HandleFunc("POST /api/panel/login/cancel", s.admin(s.handleLoginCancel))
 
 	s.mux.HandleFunc("GET /api/panel/keys", s.admin(s.handleListKeys))
 	s.mux.HandleFunc("POST /api/panel/keys", s.admin(s.handleCreateKey))
@@ -327,6 +346,33 @@ func (s *Server) refreshAccount(ctx context.Context, id string) error {
 		lastErr = err
 	}
 	return lastErr
+}
+
+func (s *Server) handleLoginStart(w http.ResponseWriter, r *http.Request) {
+	id, err := s.loginMgr.Start()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"id": id})
+}
+
+func (s *Server) handleLoginStatus(w http.ResponseWriter, r *http.Request) {
+	sess, ok := s.loginMgr.Get(r.URL.Query().Get("id"))
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]interface{}{
+		"status": sess.Status,
+		"email":  sess.Email,
+		"error":  sess.Error,
+	})
+}
+
+func (s *Server) handleLoginCancel(w http.ResponseWriter, r *http.Request) {
+	s.loginMgr.Cancel(r.URL.Query().Get("id"))
+	writeJSON(w, map[string]interface{}{"ok": true})
 }
 
 func (s *Server) handleListKeys(w http.ResponseWriter, r *http.Request) {
