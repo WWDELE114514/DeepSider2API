@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DeepSider2API 管理面板</title>
+<style>
+  :root{
+    --bg:#0f1218; --panel:#161b24; --panel2:#1d2430; --line:#26303e;
+    --text:#e6edf3; --muted:#8b98a9; --brand:#4f8cff; --ok:#2ecc71;
+    --warn:#f5a623; --err:#ff5c5c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+  a{color:var(--brand);text-decoration:none}
+  .layout{display:flex;min-height:100vh}
+  .sidebar{width:210px;background:var(--panel);border-right:1px solid var(--line);padding:18px 12px;flex-shrink:0}
+  .brand{font-weight:700;font-size:16px;padding:6px 10px 16px;display:flex;align-items:center;gap:8px}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--brand);box-shadow:0 0 10px var(--brand)}
+  .nav a{display:block;padding:10px 12px;border-radius:8px;color:var(--muted);margin-bottom:4px;font-size:14px;cursor:pointer}
+  .nav a.active,.nav a:hover{background:var(--panel2);color:var(--text)}
+  .main{flex:1;padding:24px 28px;overflow:auto}
+  h1{font-size:20px;margin:0 0 18px}
+  h2{font-size:15px;margin:22px 0 10px;color:var(--muted);font-weight:600}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card .v{font-size:24px;font-weight:700;margin-top:6px}
+  .card .k{font-size:12px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;background:var(--panel2)}
+  tr:last-child td{border-bottom:none}
+  .btn{background:var(--brand);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+  .btn.danger{background:transparent;border:1px solid var(--err);color:var(--err)}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 11px;font-size:13px;width:100%}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .row>*{flex:0 0 auto}
+  .row .grow{flex:1 1 200px}
+  .pill{padding:2px 9px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
+  .pill.ok{color:var(--ok);border-color:var(--ok)}
+  .pill.off{color:var(--muted)}
+  .pill.warn{color:var(--warn);border-color:var(--warn)}
+  .pill.err{color:var(--err);border-color:var(--err)}
+  .muted{color:var(--muted)}
+  .section{display:none}
+  .section.active{display:block}
+  #login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50}
+  #login .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;width:340px}
+  #login h2{color:var(--text);margin:0 0 14px}
+  pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12px;max-height:360px}
+  .logline{font-family:Consolas,monospace;font-size:12px;padding:3px 0;border-bottom:1px dashed var(--line)}
+  .logline .lv{display:inline-block;width:52px}
+  .lv.info{color:var(--brand)} .lv.warn{color:var(--warn)} .lv.error{color:var(--err)}
+  .toast{position:fixed;right:20px;bottom:20px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 16px;font-size:13px;opacity:0;transition:.3s;z-index:99}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="box">
+    <h2>DeepSider2API</h2>
+    <p class="muted" style="font-size:13px;margin:0 0 12px">输入管理密钥（config.json 的 api_key）</p>
+    <input id="loginKey" type="password" placeholder="管理密钥" />
+    <div style="height:12px"></div>
+    <button class="btn" style="width:100%" onclick="doLogin()">登录</button>
+  </div>
+</div>
+
+<div class="layout" id="app" style="display:none">
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span> DeepSider2API</div>
+    <nav class="nav">
+      <a data-tab="dashboard" class="active">📊 仪表盘</a>
+      <a data-tab="accounts">👥 账号池</a>
+      <a data-tab="keys">🔑 API 密钥</a>
+      <a data-tab="models">🧩 模型</a>
+      <a data-tab="logs">📝 日志</a>
+      <a data-tab="config">⚙️ 配置</a>
+    </nav>
+    <div style="position:absolute;bottom:16px">
+      <button class="btn ghost sm" onclick="logout()">退出登录</button>
+    </div>
+  </aside>
+  <main class="main">
+    <section class="section active" id="tab-dashboard">
+      <h1>仪表盘</h1>
+      <div class="cards" id="statCards"></div>
+      <h2>按模型统计</h2>
+      <table id="modelStats"><thead><tr><th>模型</th><th>请求数</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section class="section" id="tab-accounts">
+      <h1>账号池</h1>
+      <div class="row">
+        <input class="grow" id="accName" placeholder="备注名（可选）" />
+        <input class="grow" id="accToken" placeholder="DeepSider JWT（Bearer 后的 token）" />
+        <button class="btn" onclick="addAccount()">添加账号</button>
+      </div>
+      <table id="accTable">
+        <thead><tr><th>名称</th><th>邮箱</th><th>积分</th><th>套餐</th><th>状态</th><th>失败</th><th>操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="section" id="tab-keys">
+      <h1>API 密钥</h1>
+      <div class="row">
+        <input class="grow" id="keyName" placeholder="密钥名称" />
+        <button class="btn" onclick="createKey()">生成密钥</button>
+      </div>
+      <table id="keyTable">
+        <thead><tr><th>名称</th><th>前缀</th><th>用量</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="section" id="tab-models">
+      <h1>模型列表</h1>
+      <button class="btn ghost sm" onclick="loadModels()">刷新</button>
+      <table id="modelTable"><thead><tr><th>botId</th><th>名称</th><th>类型</th><th>积分</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <section class="section" id="tab-logs">
+      <h1>运行日志</h1>
+      <div class="row">
+        <button class="btn ghost sm" onclick="loadLogs()">刷新</button>
+        <button class="btn danger sm" onclick="clearLogs()">清空</button>
+      </div>
+      <div id="logBox"></div>
+    </section>
+
+    <section class="section" id="tab-config">
+      <h1>配置</h1>
+      <div class="row"><span class="muted" style="width:120px">监听地址</span><input class="grow" id="cfgListen" /></div>
+      <div class="row"><span class="muted" style="width:120px">管理密钥</span><input class="grow" id="cfgApiKey" /></div>
+      <h2>模型编排（auto）</h2>
+      <div class="row"><label><input type="checkbox" id="cfgAutoEnabled" style="width:auto"> 启用 auto 虚拟模型</label></div>
+      <div class="row"><span class="muted" style="width:120px">白天主模型</span><input class="grow" id="cfgDayPrimary" /></div>
+      <div class="row"><span class="muted" style="width:120px">夜间主模型</span><input class="grow" id="cfgNightPrimary" /></div>
+      <div class="row"><span class="muted" style="width:120px">白天时段</span><input id="cfgDayStart" style="width:70px" /> <span class="muted">-</span> <input id="cfgDayEnd" style="width:70px" /></div>
+      <div class="row"><span class="muted" style="width:120px">降级链</span><input class="grow" id="cfgFallback" placeholder="逗号分隔" /></div>
+      <button class="btn" onclick="saveConfig()">保存配置</button>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let KEY = localStorage.getItem('ds2api_key') || '';
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2000); }
+function api(path, opts={}){
+  opts.headers = Object.assign({'Authorization':'Bearer '+KEY,'Content-Type':'application/json'}, opts.headers||{});
+  return fetch(path, opts).then(async r=>{
+    const txt = await r.text();
+    if(!r.ok) throw new Error(txt || ('HTTP '+r.status));
+    try { return JSON.parse(txt); } catch(e){ return txt; }
+  });
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtTime(t){ if(!t||t.startsWith('0001')) return '-'; return new Date(t).toLocaleString(); }
+
+function doLogin(){
+  KEY = $('#loginKey').value.trim();
+  if(!KEY) return;
+  api('/api/panel/stats').then(()=>{
+    localStorage.setItem('ds2api_key', KEY);
+    $('#login').style.display='none'; $('#app').style.display='flex';
+    refreshAll();
+  }).catch(()=>{ toast('密钥无效'); });
+}
+function logout(){ localStorage.removeItem('ds2api_key'); location.reload(); }
+
+$$('.nav a').forEach(a=>a.onclick=()=>{
+  $$('.nav a').forEach(x=>x.classList.remove('active')); a.classList.add('active');
+  $$('.section').forEach(s=>s.classList.remove('active'));
+  $('#tab-'+a.dataset.tab).classList.add('active');
+  if(a.dataset.tab==='accounts') loadAccounts();
+  if(a.dataset.tab==='keys') loadKeys();
+  if(a.dataset.tab==='models') loadModels();
+  if(a.dataset.tab==='logs') loadLogs();
+  if(a.dataset.tab==='config') loadConfig();
+  if(a.dataset.tab==='dashboard') loadStats();
+});
+
+function loadStats(){
+  api('/api/panel/stats').then(d=>{
+    const cards=[
+      ['总请求',d.total_requests],['成功',d.success_requests],['失败',d.failed_requests],
+      ['字符数',d.total_tokens],['账号数',d.accounts],['密钥数',d.keys],['运行秒',d.uptime_seconds]
+    ];
+    $('#statCards').innerHTML=cards.map(c=>`<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]||0}</div></div>`).join('');
+    const rows=Object.entries(d.per_model||{}).sort((a,b)=>b[1]-a[1]);
+    $('#modelStats tbody').innerHTML=rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${r[1]}</td></tr>`).join('')||'<tr><td colspan="2" class="muted">暂无数据</td></tr>';
+  }).catch(e=>toast('加载失败: '+e.message));
+}
+
+function loadAccounts(){
+  api('/api/panel/accounts').then(d=>{
+    $('#accTable tbody').innerHTML=(d.accounts||[]).map(a=>{
+      const cd = a.cooldown_until && new Date(a.cooldown_until)>new Date();
+      const st = a.enabled ? (cd?'<span class="pill warn">冷却</span>':'<span class="pill ok">启用</span>') : '<span class="pill off">停用</span>';
+      return `<tr>
+        <td>${esc(a.name)||'-'}</td>
+        <td>${esc(a.email)||'<span class="muted">-</span>'}</td>
+        <td>${a.credit_remaining||0}</td>
+        <td>${esc(a.plan_name)||'-'}</td>
+        <td>${st}</td>
+        <td>${a.fail_count||0}</td>
+        <td>
+          <button class="btn ghost sm" onclick="toggleAccount('${a.id}',${!a.enabled})">${a.enabled?'停用':'启用'}</button>
+          <button class="btn ghost sm" onclick="refreshAccount('${a.id}')">刷新</button>
+          <button class="btn danger sm" onclick="delAccount('${a.id}')">删除</button>
+        </td></tr>`;
+    }).join('')||'<tr><td colspan="7" class="muted">暂无账号</td></tr>';
+  }).catch(e=>toast('加载失败: '+e.message));
+}
+function addAccount(){
+  const name=$('#accName').value.trim(), token=$('#accToken').value.trim();
+  if(!token) return toast('请填写 token');
+  api('/api/panel/accounts',{method:'POST',body:JSON.stringify({name,token})})
+    .then(()=>{ $('#accName').value='';$('#accToken').value=''; toast('已添加'); loadAccounts(); })
+    .catch(e=>toast('添加失败: '+e.message));
+}
+function toggleAccount(id,enabled){ api(`/api/panel/accounts/${id}/toggle`,{method:'POST',body:JSON.stringify({enabled})}).then(loadAccounts).catch(e=>toast(e.message)); }
+function delAccount(id){ if(confirm('确认删除？')) api(`/api/panel/accounts/${id}`,{method:'DELETE'}).then(loadAccounts).catch(e=>toast(e.message)); }
+function refreshAccount(id){ toast('刷新中...'); api(`/api/panel/accounts/${id}/refresh`,{method:'POST'}).then(()=>{toast('已刷新');loadAccounts();}).catch(e=>toast('刷新失败: '+e.message)); }
+
+function loadKeys(){
+  api('/api/panel/keys').then(d=>{
+    $('#keyTable tbody').innerHTML=(d.keys||[]).map(k=>`<tr>
+      <td>${esc(k.name)||'-'}</td>
+      <td><code>${esc(k.prefix)}...</code></td>
+      <td>${k.usage||0}</td>
+      <td>${k.enabled?'<span class="pill ok">启用</span>':'<span class="pill off">停用</span>'}</td>
+      <td>${fmtTime(k.created_at)}</td>
+      <td>
+        <button class="btn ghost sm" onclick="toggleKey('${k.id}',${!k.enabled})">${k.enabled?'停用':'启用'}</button>
+        <button class="btn danger sm" onclick="delKey('${k.id}')">删除</button>
+      </td></tr>`).join('')||'<tr><td colspan="6" class="muted">暂无密钥</td></tr>';
+  }).catch(e=>toast('加载失败: '+e.message));
+}
+function createKey(){
+  const name=$('#keyName').value.trim()||'key';
+  api('/api/panel/keys',{method:'POST',body:JSON.stringify({name})}).then(d=>{
+    $('#keyName').value='';
+    prompt('请立即复制，密钥只显示一次：', d.key);
+    loadKeys();
+  }).catch(e=>toast('创建失败: '+e.message));
+}
+function toggleKey(id,enabled){ api(`/api/panel/keys/${id}/toggle`,{method:'POST',body:JSON.stringify({enabled})}).then(loadKeys).catch(e=>toast(e.message)); }
+function delKey(id){ if(confirm('确认删除？')) api(`/api/panel/keys/${id}`,{method:'DELETE'}).then(loadKeys).catch(e=>toast(e.message)); }
+
+function loadModels(){
+  $('#modelTable tbody').innerHTML='<tr><td colspan="4" class="muted">加载中...</td></tr>';
+  api('/api/panel/models').then(d=>{
+    $('#modelTable tbody').innerHTML=(d.models||[]).map(m=>`<tr>
+      <td><code>${esc(m.botId)}</code></td><td>${esc(m.name||m.modelName||'')}</td>
+      <td>${esc(m.classification||'')}</td><td>${m.credits||0}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">无模型</td></tr>';
+  }).catch(e=>{ $('#modelTable tbody').innerHTML=`<tr><td colspan="4" class="muted">加载失败: ${esc(e.message)}</td></tr>`; });
+}
+
+function loadLogs(){
+  api('/api/panel/logs').then(d=>{
+    const logs=(d.logs||[]).slice().reverse();
+    $('#logBox').innerHTML=logs.map(l=>`<div class="logline"><span class="lv ${l.level}">${l.level}</span> <span class="muted">${fmtTime(l.time)}</span> ${esc(l.message)}</div>`).join('')||'<div class="muted">暂无日志</div>';
+  }).catch(e=>toast(e.message));
+}
+function clearLogs(){ api('/api/panel/logs',{method:'DELETE'}).then(loadLogs).catch(e=>toast(e.message)); }
+
+function loadConfig(){
+  api('/api/panel/config').then(d=>{
+    $('#cfgListen').value=d.listen||''; $('#cfgApiKey').value=d.api_key||'';
+    const am=d.auto_model||{};
+    $('#cfgAutoEnabled').checked=!!am.enabled;
+    $('#cfgDayPrimary').value=am.day_primary||''; $('#cfgNightPrimary').value=am.night_primary||'';
+    $('#cfgDayStart').value=am.day_start||8; $('#cfgDayEnd').value=am.day_end||23;
+    $('#cfgFallback').value=(am.fallback||[]).join(',');
+  }).catch(e=>toast(e.message));
+}
+function saveConfig(){
+  const body={
+    listen:$('#cfgListen').value.trim(), api_key:$('#cfgApiKey').value.trim(),
+    auto_model:{
+      enabled:$('#cfgAutoEnabled').checked,
+      virtual_id:'auto',
+      day_primary:$('#cfgDayPrimary').value.trim(),
+      night_primary:$('#cfgNightPrimary').value.trim(),
+      day_start:parseInt($('#cfgDayStart').value)||8,
+      day_end:parseInt($('#cfgDayEnd').value)||23,
+      fallback:$('#cfgFallback').value.split(',').map(s=>s.trim()).filter(Boolean),
+      on_empty:true
+    }
+  };
+  api('/api/panel/config',{method:'POST',body:JSON.stringify(body)}).then(()=>toast('已保存')).catch(e=>toast('保存失败: '+e.message));
+}
+
+function refreshAll(){ loadStats(); loadAccounts(); loadKeys(); }
+
+if(KEY){
+  api('/api/panel/stats').then(()=>{ $('#login').style.display='none'; $('#app').style.display='flex'; refreshAll(); })
+    .catch(()=>{ localStorage.removeItem('ds2api_key'); });
+}
+</script>
+</body>
+</html>

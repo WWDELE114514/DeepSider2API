@@ -1,0 +1,17 @@
+services:
+  deepsider2api:
+    image: ${IMAGE:-ghcr.io/wwdele114514/deepsider2api:latest}
+    # build: .
+    container_name: deepsider2api
+    entrypoint: ['/app/deepsider2api', '-config', '/app/config/config.json']
+    restart: unless-stopped
+    user: "${PUID:-10001}:${PGID:-10001}"
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "7863:7863"
+    volumes:
+      - ./data:/app/data
+      - ./auths:/app/auths
+      # 宿主机需先有 config/config.json：cp config.example.json config/config.json
+      - ./config:/app/config

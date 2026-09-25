@@ -1,0 +1,40 @@
+{
+  "listen": ":7863",
+  "api_key": "change_me",
+  "data_dir": "./data",
+  "auth_dir": "./auths",
+  "state_file": "./data/state.json",
+  "admin_password_hash": "",
+  "trust_proxy": false,
+  "upstream": {
+    "base_urls": [
+      "https://api.deepsider.me",
+      "https://api2.deepsider.me",
+      "https://api5.deepsider.net"
+    ],
+    "version": "3.2.8",
+    "lang": "zh-CN",
+    "timeout_seconds": 120,
+    "idle_seconds": 300
+  },
+  "pool": {
+    "max_in_flight": 2,
+    "breaker_threshold": 3,
+    "breaker_cooldown": "30m"
+  },
+  "auto_model": {
+    "enabled": false,
+    "virtual_id": "auto",
+    "day_primary": "",
+    "night_primary": "",
+    "day_start": 8,
+    "day_end": 23,
+    "fallback": [],
+    "on_empty": true
+  },
+  "model_fallback": {},
+  "session_sticky": {
+    "enabled": true,
+    "ttl": "30m"
+  }
+}

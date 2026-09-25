@@ -1,0 +1,57 @@
+name: Build Windows Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'internal/**'
+      - 'config.example.json'
+      - '.github/workflows/windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Tidy modules
+        run: go mod tidy
+
+      - name: Test
+        run: go test -timeout 5m ./...
+
+      - name: Build Windows executable
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist
+          go build -trimpath -tags timetzdata -ldflags="-s -w" -o dist/deepsider2api.exe ./cmd/server
+
+      - name: Package
+        run: |
+          cp config.example.json LICENSE dist/
+          printf '%s\n' "$GITHUB_SHA" > dist/BUILD_COMMIT.txt
+          cd dist
+          sha256sum *.exe > SHA256SUMS.txt
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepsider2api-windows-amd64
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

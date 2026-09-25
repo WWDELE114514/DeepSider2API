@@ -1,0 +1,16 @@
+# build artifacts
+/dist/
+/outputs/
+*.exe
+
+# runtime data
+/data/
+/auths/
+/config.json
+*.tmp
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
