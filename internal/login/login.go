@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -121,16 +122,18 @@ func (m *Manager) Cancel(id string) bool {
 func (m *Manager) run(ctx context.Context, s *Session) {
 	defer s.cancel()
 
-	result, err := capture(ctx, m.cfg.Get().Login)
+	result, err := m.captureSafe(ctx)
 	if err != nil {
+		log.Printf("[login] 失败: %v", err)
 		m.mu.Lock()
 		if s.Status != StatusCancelled {
 			s.Status = StatusError
-			s.Error = err.Error()
+			s.Error = truncate(err.Error(), 1500)
 		}
 		m.mu.Unlock()
 		return
 	}
+	log.Printf("[login] 成功: %s", result.Email)
 
 	if m.onResult != nil {
 		if err := m.onResult(result); err != nil {
@@ -146,6 +149,25 @@ func (m *Manager) run(ctx context.Context, s *Session) {
 	s.Status = StatusSuccess
 	s.Email = result.Email
 	m.mu.Unlock()
+}
+
+// captureSafe isolates the browser automation so that any panic (chromedp is
+// not fully panic safe on every platform) is reported instead of crashing the
+// whole gateway process.
+func (m *Manager) captureSafe(ctx context.Context) (res Result, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v\n%s", r, debug.Stack())
+		}
+	}()
+	return capture(ctx, m.cfg.Get().Login)
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "...(truncated)"
 }
 
 // hookScript patches fetch/XHR and stores the first captured token pair on
@@ -237,14 +259,20 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 	}
 	defer cancelBrowser()
 
-	log.Printf("[login] 启动浏览器并打开: %s", lc.Page)
-	if err := chromedp.Run(browserCtx,
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
-			return err
-		}),
-		chromedp.Navigate(lc.Page),
-	); err != nil {
+	log.Printf("[login] 启动浏览器…")
+	if err := chromedp.Run(browserCtx); err != nil {
+		return Result{}, fmt.Errorf("启动浏览器失败: %w", err)
+	}
+
+	if err := chromedp.Run(browserCtx, chromedp.ActionFunc(func(ctx context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
+		return err
+	})); err != nil {
+		return Result{}, fmt.Errorf("注入脚本失败: %w", err)
+	}
+
+	log.Printf("[login] 打开登录页: %s", lc.Page)
+	if err := chromedp.Run(browserCtx, chromedp.Navigate(lc.Page)); err != nil {
 		return Result{}, fmt.Errorf("打开登录页失败: %w", err)
 	}
 	log.Printf("[login] 登录页已打开，等待用户完成登录…")
