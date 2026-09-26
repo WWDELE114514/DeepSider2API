@@ -180,6 +180,8 @@ curl http://localhost:7863/v1/images/generations \
 
 ---
 
-## License
+## 致谢 / License
 
-[MIT](LICENSE)
+- **模型编排**（虚拟模型 `auto` 的昼夜切换 + 递归 `model_fallback` 降级链）以及部分网关 / 面板结构，参考了 [JACKY199503/workbuddy2api-panel-plus](https://github.com/JACKY199503/workbuddy2api-panel-plus)（及其上游 [linguo2625469/workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)、[Sliverkiss/workbuddy2api](https://github.com/Sliverkiss/workbuddy2api)）。这些项目均为 **MIT License**，其版权与许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- `i-sign` 复用 DeepSider 的 `sign_wasm`；DeepSider 及其资产归其所有者，本仓库不授予任何 DeepSider 服务权利。
+- 本项目自身：[MIT](LICENSE)。
