@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -131,22 +132,13 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 	captureMutex.Lock()
 	defer captureMutex.Unlock()
 
-	profileDir, err := os.MkdirTemp("", "ds2api-webview2-")
-	if err != nil {
-		return Result{}, err
+	// webview.h keeps the WebView2 profile in %APPDATA%\<exe name>. Wipe it so
+	// every login starts logged out, which is required to add several accounts.
+	// (The WEBVIEW2_USER_DATA_FOLDER env var is not honoured on Windows.)
+	if profile := webviewProfileDir(); profile != "" {
+		_ = os.RemoveAll(profile)
+		defer os.RemoveAll(profile)
 	}
-	defer os.RemoveAll(profileDir)
-
-	// A private WebView2 profile keeps the user's Edge data untouched.
-	prev, hadPrev := os.LookupEnv("WEBVIEW2_USER_DATA_FOLDER")
-	_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", profileDir)
-	defer func() {
-		if hadPrev {
-			_ = os.Setenv("WEBVIEW2_USER_DATA_FOLDER", prev)
-		} else {
-			_ = os.Unsetenv("WEBVIEW2_USER_DATA_FOLDER")
-		}
-	}()
 
 	resultCh := make(chan Result, 1)
 	done := make(chan struct{})
@@ -198,4 +190,18 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 	case <-done:
 		return Result{}, fmt.Errorf("登录窗口已关闭")
 	}
+}
+
+// webviewProfileDir mirrors the folder webview.h uses on Windows:
+// %APPDATA%\<executable name>.
+func webviewProfileDir() string {
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		return ""
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(appData, filepath.Base(exe))
 }
