@@ -215,6 +215,81 @@ func (c *Client) RetrieveProfile(ctx context.Context, token string) (Profile, er
 	return Profile{Email: parsed.Data.Email, UID: parsed.Data.UID}, nil
 }
 
+// Invitation is the per-account invite code and share copy.
+type Invitation struct {
+	InvitationID string `json:"invitationId"`
+	Desc         string `json:"desc"`
+	ShareTip     string `json:"shareTip"`
+}
+
+// InvitationStats summarises invite progress for an account.
+type InvitationStats struct {
+	InvitedCount  int `json:"invitedCount"`
+	ChatStdCount  int `json:"chatStdCount"`
+	ChatAdvCount  int `json:"chatAdvCount"`
+	RewardCredits int `json:"rewardCredits"`
+}
+
+// CreateInvitation returns the account's invite code (JWT only, no i-sign).
+func (c *Client) CreateInvitation(ctx context.Context, token string) (Invitation, error) {
+	base := c.nextBase()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/invitation/create", nil)
+	if err != nil {
+		return Invitation{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	for k, v := range c.commonHeaders() {
+		req.Header.Set(k, v)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return Invitation{}, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return Invitation{}, &APIError{Status: resp.StatusCode, Body: string(raw)}
+	}
+	var parsed struct {
+		Code int        `json:"code"`
+		Data Invitation `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return Invitation{}, fmt.Errorf("decode invitation: %w", err)
+	}
+	return parsed.Data, nil
+}
+
+// InvitationOverview returns invite statistics (JWT only, no i-sign).
+func (c *Client) InvitationOverview(ctx context.Context, token string) (InvitationStats, error) {
+	base := c.nextBase()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/invitation/overview", nil)
+	if err != nil {
+		return InvitationStats{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	for k, v := range c.commonHeaders() {
+		req.Header.Set(k, v)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return InvitationStats{}, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return InvitationStats{}, &APIError{Status: resp.StatusCode, Body: string(raw)}
+	}
+	var parsed struct {
+		Code int             `json:"code"`
+		Data InvitationStats `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return InvitationStats{}, fmt.Errorf("decode invitation overview: %w", err)
+	}
+	return parsed.Data, nil
+}
+
 // TokenPair is the result of a refresh-token exchange.
 type TokenPair struct {
 	Token        string `json:"token"`

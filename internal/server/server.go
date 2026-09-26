@@ -117,6 +117,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/panel/accounts/{id}/toggle", s.admin(s.handleToggleAccount))
 	s.mux.HandleFunc("DELETE /api/panel/accounts/{id}", s.admin(s.handleDeleteAccount))
 	s.mux.HandleFunc("POST /api/panel/accounts/{id}/refresh", s.admin(s.handleRefreshAccount))
+	s.mux.HandleFunc("GET /api/panel/invitation", s.admin(s.handleInvitation))
 
 	s.mux.HandleFunc("POST /api/panel/login/start", s.admin(s.handleLoginStart))
 	s.mux.HandleFunc("GET /api/panel/login/status", s.admin(s.handleLoginStatus))
@@ -346,6 +347,34 @@ func (s *Server) refreshAccount(ctx context.Context, id string) error {
 		lastErr = err
 	}
 	return lastErr
+}
+
+func (s *Server) handleInvitation(w http.ResponseWriter, r *http.Request) {
+	acc, ok := s.pool.Get(r.URL.Query().Get("id"))
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+
+	inv, err := s.upstream.CreateInvitation(ctx, acc.Token)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	stats, _ := s.upstream.InvitationOverview(ctx, acc.Token)
+
+	writeJSON(w, map[string]interface{}{
+		"email":          acc.Email,
+		"invitation_id":  inv.InvitationID,
+		"desc":           inv.Desc,
+		"share_tip":      inv.ShareTip,
+		"invited_count":  stats.InvitedCount,
+		"chat_std_count": stats.ChatStdCount,
+		"chat_adv_count": stats.ChatAdvCount,
+		"reward_credits": stats.RewardCredits,
+	})
 }
 
 func (s *Server) handleLoginStart(w http.ResponseWriter, r *http.Request) {

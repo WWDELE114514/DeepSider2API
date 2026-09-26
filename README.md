@@ -14,6 +14,7 @@
 - **API 密钥分发**：面板签发 `sk-...` 子密钥，可停用 / 删除，仅存 SHA-256。
 - **一键登录获取账号**：面板点「登录获取账号」→ 后台弹出**内嵌 WebView2 登录窗口**（独立 profile，不碰你的 Edge 数据）→ 你在官方登录页手动登录（Google / 邮箱）→ 自动拦截 `/user/login`、`/user/google-onetap-login` 响应抓取 `{token, refreshToken, email}` 并入池。登录页可配置。
 - **Token 自动刷新**：账号保存 `refreshToken`，可通过 `/user/refreshtoken` 续期。
+- **邀请码查询**：账号行「邀请」按钮 → 显示该账号专属邀请码、邀请链接、已邀请人数与奖励积分（`/api/invitation/create` + `/api/invitation/overview`，仅需 JWT）。
 - **模型编排**：虚拟模型 `auto` 按昼夜自动切换主模型，并支持递归降级链 `model_fallback`（深度 ≤3、长度 ≤8）。
 - **Web 管理面板**：仪表盘、账号池、密钥、模型列表、运行日志、在线改配置（液态玻璃风格，地址 `/panel/`）。
 - **签名复用**：直接复用 DeepSider 扩展的 `sign_wasm`（wasm-bindgen + wazero），生成 `i-sign`，无需逆向哈希算法。

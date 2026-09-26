@@ -197,6 +197,15 @@
   </main>
 </div>
 <div class="toast glass" id="toast"></div>
+<div id="modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.35);backdrop-filter:blur(4px);z-index:80;align-items:center;justify-content:center">
+  <div class="glass" style="max-width:580px;width:92%;padding:22px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 id="modalTitle" style="margin:0;text-transform:none">标题</h2>
+      <button class="btn ghost sm" onclick="closeModal()">关闭</button>
+    </div>
+    <div id="modalBody" style="font-size:13px;line-height:1.9"></div>
+  </div>
+</div>
 
 <script>
 let KEY = localStorage.getItem('ds2api_key') || '';
@@ -266,6 +275,7 @@ function loadAccounts(){
         <td>
           <button class="btn ghost sm" onclick="toggleAccount('${a.id}',${!a.enabled})">${a.enabled?'停用':'启用'}</button>
           <button class="btn ghost sm" onclick="refreshAccount('${a.id}')">刷新</button>
+          <button class="btn ghost sm" onclick="showInvite('${a.id}')">邀请</button>
           <button class="btn danger sm" onclick="delAccount('${a.id}')">删除</button>
         </td></tr>`;
     }).join('')||'<tr><td colspan="7" class="muted">暂无账号</td></tr>';
@@ -296,6 +306,22 @@ function addAccount(){
 function toggleAccount(id,enabled){ api(`/api/panel/accounts/${id}/toggle`,{method:'POST',body:JSON.stringify({enabled})}).then(loadAccounts).catch(e=>toast(e.message)); }
 function delAccount(id){ if(confirm('确认删除？')) api(`/api/panel/accounts/${id}`,{method:'DELETE'}).then(loadAccounts).catch(e=>toast(e.message)); }
 function refreshAccount(id){ toast('刷新中...'); api(`/api/panel/accounts/${id}/refresh`,{method:'POST'}).then(()=>{toast('已刷新');loadAccounts();}).catch(e=>toast('刷新失败: '+e.message)); }
+
+function openModal(title, html){ $('#modalTitle').textContent=title; $('#modalBody').innerHTML=html; $('#modal').style.display='flex'; }
+function closeModal(){ $('#modal').style.display='none'; }
+function showInvite(id){
+  openModal('邀请', '<span class="muted">获取中…</span>');
+  api('/api/panel/invitation?id='+encodeURIComponent(id)).then(d=>{
+    const link='https://web.deepsider.online/?c='+encodeURIComponent(d.invitation_id||'');
+    openModal('邀请码', `
+      <div>账号：${esc(d.email||'')}</div>
+      <div>邀请码：<code style="font-size:15px">${esc(d.invitation_id||'')}</code></div>
+      <div>邀请链接：<code>${esc(link)}</code></div>
+      <div>已邀请：${d.invited_count||0} 人 ｜ 奖励积分：${d.reward_credits||0}</div>
+      <div class="muted" style="margin-top:8px">${esc(d.desc||'')}</div>
+    `);
+  }).catch(e=>openModal('邀请', '<span style="color:#dc2626">获取失败：'+esc(e.message)+'</span>'));
+}
 
 function loadKeys(){
   api('/api/panel/keys').then(d=>{
