@@ -260,7 +260,9 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 	urls, err := s.generateImages(r.Context(), model, req.Prompt, resolution, ratio)
 	if err != nil {
 		s.stats.Request("image:"+model, false, 0)
-		s.stats.Log("error", "image failed: "+err.Error())
+		caller := callerFrom(r.Context())
+		n := s.stats.IncCaller(caller.Name)
+		s.stats.Log("error", fmt.Sprintf("key=%s #%d model=%s in=%q err=%s", caller.Name, n, model, truncateRunes(req.Prompt, 150), err.Error()))
 		writeOpenAIError(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -272,5 +274,7 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		"data":    data,
 	})
 	s.stats.Request("image:"+model, true, 0)
-	s.stats.Log("info", fmt.Sprintf("image ok model=%s n=%d", model, len(urls)))
+	caller := callerFrom(r.Context())
+	n := s.stats.IncCaller(caller.Name)
+	s.stats.Log("info", fmt.Sprintf("key=%s #%d model=%s in=%q images=%d", caller.Name, n, model, truncateRunes(req.Prompt, 150), len(urls)))
 }

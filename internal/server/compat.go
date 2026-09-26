@@ -75,6 +75,9 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 	s.stats.Request(used, true, int64(len(text)))
+	caller := callerFrom(r.Context())
+	n := s.stats.IncCaller(caller.Name)
+	s.stats.Log("info", fmt.Sprintf("key=%s #%d proto=anthropic model=%s in=%q out=%q", caller.Name, n, used, truncateRunes(buildPrompt(msgs), 150), truncateRunes(text, 150)))
 }
 
 func (s *Server) streamMessages(w http.ResponseWriter, r *http.Request, id, model string, msgs []chatMessage) {
@@ -241,6 +244,9 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 	s.stats.Request(used, true, int64(len(text)))
+	caller := callerFrom(r.Context())
+	n := s.stats.IncCaller(caller.Name)
+	s.stats.Log("info", fmt.Sprintf("key=%s #%d proto=responses model=%s in=%q out=%q", caller.Name, n, used, truncateRunes(buildPrompt(msgs), 150), truncateRunes(text, 150)))
 }
 
 func (s *Server) streamResponses(w http.ResponseWriter, r *http.Request, respID, model string, msgs []chatMessage) {

@@ -269,9 +269,13 @@ func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, req chatRequ
 		reportModel = usedModel
 	}
 
+	caller := callerFrom(r.Context())
+	in := truncateRunes(buildPrompt(req.Messages), 150)
+
 	if err != nil && text == "" {
 		s.stats.Request(reportModel, false, 0)
-		s.stats.Log("error", "chat failed: "+err.Error())
+		n := s.stats.IncCaller(caller.Name)
+		s.stats.Log("error", fmt.Sprintf("key=%s #%d model=%s in=%q err=%s", caller.Name, n, reportModel, in, err.Error()))
 		s.writeChunk(w, id, created, reportModel, "[error] "+err.Error(), true)
 		w.Write([]byte("data: [DONE]\n\n"))
 		flusher.Flush()
@@ -282,7 +286,8 @@ func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, req chatRequ
 	w.Write([]byte("data: [DONE]\n\n"))
 	flusher.Flush()
 	s.stats.Request(reportModel, true, int64(len(text)))
-	s.stats.Log("info", fmt.Sprintf("chat ok model=%s chars=%d", reportModel, len(text)))
+	n := s.stats.IncCaller(caller.Name)
+	s.stats.Log("info", fmt.Sprintf("key=%s #%d model=%s in=%q out=%q", caller.Name, n, reportModel, in, truncateRunes(text, 150)))
 }
 
 func (s *Server) writeChunk(w http.ResponseWriter, id string, created int64, model, content string, done bool) {
@@ -311,9 +316,13 @@ func (s *Server) writeChunk(w http.ResponseWriter, id string, created int64, mod
 
 func (s *Server) collectChat(w http.ResponseWriter, r *http.Request, req chatRequest) {
 	text, usedModel, err := s.runChat(r.Context(), req.Model, req.Messages, nil)
+	caller := callerFrom(r.Context())
+	in := truncateRunes(buildPrompt(req.Messages), 150)
+
 	if err != nil && text == "" {
 		s.stats.Request(usedModel, false, 0)
-		s.stats.Log("error", "chat failed: "+err.Error())
+		n := s.stats.IncCaller(caller.Name)
+		s.stats.Log("error", fmt.Sprintf("key=%s #%d model=%s in=%q err=%s", caller.Name, n, usedModel, in, err.Error()))
 		writeOpenAIError(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -338,7 +347,8 @@ func (s *Server) collectChat(w http.ResponseWriter, r *http.Request, req chatReq
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 	s.stats.Request(usedModel, true, int64(len(text)))
-	s.stats.Log("info", fmt.Sprintf("chat ok model=%s chars=%d", usedModel, len(text)))
+	n := s.stats.IncCaller(caller.Name)
+	s.stats.Log("info", fmt.Sprintf("key=%s #%d model=%s in=%q out=%q", caller.Name, n, usedModel, in, truncateRunes(text, 150)))
 }
 
 func writeOpenAIError(w http.ResponseWriter, status int, message string) {

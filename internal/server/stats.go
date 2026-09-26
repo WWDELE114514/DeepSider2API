@@ -20,13 +20,25 @@ type Stats struct {
 	FailedRequests  int64
 	TotalTokens     int64
 	PerModel        map[string]int64
+	PerCaller       map[string]int64
 	Recent          []LogEntry
 	maxLogs         int
 }
 
 // NewStats creates an empty stats collector.
 func NewStats() *Stats {
-	return &Stats{PerModel: map[string]int64{}, maxLogs: 500}
+	return &Stats{PerModel: map[string]int64{}, PerCaller: map[string]int64{}, maxLogs: 500}
+}
+
+// IncCaller increments and returns the call count for a caller (api key name).
+func (s *Stats) IncCaller(name string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if name == "" {
+		name = "?"
+	}
+	s.PerCaller[name]++
+	return s.PerCaller[name]
 }
 
 // Log appends a log entry to the ring buffer.
@@ -63,6 +75,10 @@ func (s *Stats) Snapshot() map[string]interface{} {
 	for k, v := range s.PerModel {
 		perModel[k] = v
 	}
+	perCaller := make(map[string]int64, len(s.PerCaller))
+	for k, v := range s.PerCaller {
+		perCaller[k] = v
+	}
 	logs := make([]LogEntry, len(s.Recent))
 	copy(logs, s.Recent)
 	return map[string]interface{}{
@@ -71,6 +87,7 @@ func (s *Stats) Snapshot() map[string]interface{} {
 		"failed_requests":  s.FailedRequests,
 		"total_tokens":     s.TotalTokens,
 		"per_model":        perModel,
+		"per_caller":       perCaller,
 		"logs":             logs,
 	}
 }

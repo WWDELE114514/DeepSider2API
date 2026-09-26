@@ -177,6 +177,31 @@ func (s *Server) isAdmin(token string) bool {
 	return apiKey != "" && token == apiKey
 }
 
+type callerInfo struct {
+	Name string
+	ID   string
+}
+
+type callerCtxKeyType struct{}
+
+var callerCtxKey callerCtxKeyType
+
+func callerFrom(ctx context.Context) callerInfo {
+	if v, ok := ctx.Value(callerCtxKey).(callerInfo); ok {
+		return v
+	}
+	return callerInfo{Name: "?"}
+}
+
+func truncateRunes(s string, n int) string {
+	s = strings.ReplaceAll(strings.TrimSpace(s), "\n", " ")
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
 func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		setCORS(w)
@@ -190,11 +215,13 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if s.isAdmin(token) {
+			r = r.WithContext(context.WithValue(r.Context(), callerCtxKey, callerInfo{Name: "admin"}))
 			next(w, r)
 			return
 		}
 		if key, ok := s.keys.Verify(token); ok {
 			s.keys.Touch(key.ID)
+			r = r.WithContext(context.WithValue(r.Context(), callerCtxKey, callerInfo{Name: key.Name, ID: key.ID}))
 			next(w, r)
 			return
 		}
