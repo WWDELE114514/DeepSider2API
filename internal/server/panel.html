@@ -121,6 +121,7 @@
     <nav class="nav">
       <a data-tab="dashboard" class="active">📊 仪表盘</a>
       <a data-tab="accounts">👥 账号池</a>
+      <a data-tab="chat">💬 对话</a>
       <a data-tab="keys">🔑 API 密钥</a>
       <a data-tab="models">🧩 模型</a>
       <a data-tab="logs">📝 日志</a>
@@ -169,6 +170,20 @@
       <h1>模型列表</h1>
       <div class="row"><button class="btn ghost" onclick="loadModels()">刷新</button></div>
       <div class="tablewrap glass"><table id="modelTable"><thead><tr><th>botId</th><th>名称</th><th>类型</th><th>积分</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="section" id="tab-chat">
+      <h1>对话测试</h1>
+      <div class="row">
+        <select id="chatModel" class="grow"></select>
+        <button class="btn ghost" onclick="loadChatModels()">刷新模型</button>
+        <button class="btn ghost" onclick="clearChat()">清空</button>
+      </div>
+      <div id="chatBox" class="glass" style="padding:16px;min-height:320px;max-height:56vh;overflow:auto;font-size:13px;line-height:1.7"></div>
+      <div class="row" style="margin-top:12px">
+        <input class="grow" id="chatInput" placeholder="输入消息，回车发送" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}" />
+        <button class="btn primary" id="chatSend" onclick="sendChat()">发送</button>
+      </div>
     </section>
 
     <section class="section" id="tab-logs">
@@ -241,6 +256,7 @@ $$('.nav a').forEach(a=>a.onclick=()=>{
   $$('.section').forEach(s=>s.classList.remove('active'));
   $('#tab-'+a.dataset.tab).classList.add('active');
   if(a.dataset.tab==='accounts') loadAccounts();
+  if(a.dataset.tab==='chat') loadChatModels();
   if(a.dataset.tab==='keys') loadKeys();
   if(a.dataset.tab==='models') loadModels();
   if(a.dataset.tab==='logs') loadLogs();
@@ -321,6 +337,69 @@ function showInvite(id){
       <div class="muted" style="margin-top:8px">${esc(d.desc||'')}</div>
     `);
   }).catch(e=>openModal('邀请', '<span style="color:#dc2626">获取失败：'+esc(e.message)+'</span>'));
+}
+
+let chatMessages = [];
+function loadChatModels(){
+  api('/api/panel/models').then(d=>{
+    const sel=$('#chatModel'); const cur=sel.value;
+    const models=(d.models||[]).filter(m=>{
+      if(m.disabled) return false;
+      if(m.isDrawing || m.asyncGenerateVideo) return false;
+      const c=String(m.classification||'').toLowerCase();
+      return c===''||c==='chat';
+    });
+    sel.innerHTML='<option value="auto">auto（自动编排）</option>'+models.map(m=>{
+      const t=m.title||m.name||m.botId; const cr=(m.credits==null?0:m.credits);
+      return `<option value="${esc(m.botId)}">${esc(t)} · ${esc(m.botId)} · ${cr}分</option>`;
+    }).join('');
+    if(cur) sel.value=cur;
+  }).catch(e=>toast('加载模型失败: '+e.message));
+}
+function renderChat(){
+  const box=$('#chatBox');
+  box.innerHTML=chatMessages.map(m=>{
+    const who=m.role==='user'?'我':'AI';
+    const body=esc(m.content)||'<span class="muted">…</span>';
+    return `<div style="margin-bottom:12px"><div class="muted" style="font-size:12px">${who}</div><div style="white-space:pre-wrap">${body}</div></div>`;
+  }).join('')||'<div class="muted">选择模型后开始对话测试…</div>';
+  box.scrollTop=box.scrollHeight;
+}
+function clearChat(){ chatMessages=[]; renderChat(); }
+async function sendChat(){
+  const input=$('#chatInput'); const text=input.value.trim();
+  if(!text) return;
+  input.value='';
+  chatMessages.push({role:'user',content:text});
+  chatMessages.push({role:'assistant',content:''});
+  renderChat();
+  const model=$('#chatModel').value||'auto';
+  $('#chatSend').disabled=true;
+  try{
+    const resp=await fetch('/api/panel/chat',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({model, messages:chatMessages.slice(0,-1)})
+    });
+    if(!resp.ok) throw new Error((await resp.text())||('HTTP '+resp.status));
+    const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){
+      const {value,done}=await reader.read(); if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      let idx;
+      while((idx=buf.indexOf('\n\n'))>=0){
+        const frame=buf.slice(0,idx); buf=buf.slice(idx+2);
+        const line=frame.split('\n').find(l=>l.startsWith('data:')); if(!line) continue;
+        try{
+          const j=JSON.parse(line.slice(5).trim());
+          if(j.delta){ chatMessages[chatMessages.length-1].content+=j.delta; renderChat(); }
+          if(j.error){ chatMessages[chatMessages.length-1].content+='\n[错误] '+j.error; renderChat(); }
+        }catch(e){}
+      }
+    }
+  }catch(e){
+    chatMessages[chatMessages.length-1].content+='\n[失败] '+e.message; renderChat();
+  }finally{ $('#chatSend').disabled=false; }
 }
 
 function loadKeys(){

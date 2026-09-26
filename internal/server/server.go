@@ -144,6 +144,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/panel/config", s.admin(s.handleGetConfig))
 	s.mux.HandleFunc("POST /api/panel/config", s.admin(s.handleSetConfig))
 	s.mux.HandleFunc("GET /api/panel/models", s.admin(s.handlePanelModels))
+	s.mux.HandleFunc("POST /api/panel/chat", s.admin(s.handlePanelChat))
 	s.mux.HandleFunc("GET /api/panel/logs", s.admin(s.handleLogs))
 	s.mux.HandleFunc("DELETE /api/panel/logs", s.admin(s.handleClearLogs))
 
@@ -517,6 +518,53 @@ func (s *Server) handlePanelModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"models": models})
+}
+
+// handlePanelChat streams a test conversation for the management panel. It
+// reuses the same model chain and account pool as the public API.
+func (s *Server) handlePanelChat(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Model    string        `json:"model"`
+		Messages []chatMessage `json:"messages"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if len(req.Messages) == 0 {
+		http.Error(w, "messages is required", http.StatusBadRequest)
+		return
+	}
+	if req.Model == "" {
+		req.Model = "auto"
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	send := func(v interface{}) {
+		b, _ := json.Marshal(v)
+		w.Write([]byte("data: "))
+		w.Write(b)
+		w.Write([]byte("\n\n"))
+		flusher.Flush()
+	}
+
+	text, used, err := s.runChat(r.Context(), req.Model, req.Messages, func(delta string) error {
+		send(map[string]interface{}{"delta": delta})
+		return nil
+	})
+	if err != nil && text == "" {
+		send(map[string]interface{}{"error": err.Error()})
+		return
+	}
+	send(map[string]interface{}{"done": true, "model": used, "text": text})
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
