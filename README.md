@@ -18,7 +18,9 @@
 - **Token 自动刷新**：账号保存 `refreshToken`，可通过 `/user/refreshtoken` 续期。
 - **邀请码查询**：账号行「邀请」按钮 → 显示该账号专属邀请码、邀请链接、已邀请人数与奖励积分（`/api/invitation/create` + `/api/invitation/overview`，仅需 JWT）。
 - **模型编排**：虚拟模型 `auto` 按昼夜自动切换主模型，并支持递归降级链 `model_fallback`（深度 ≤3、长度 ≤8）。
-- **Web 管理面板**：仪表盘、账号池、密钥、模型列表、运行日志、在线改配置（液态玻璃风格，地址 `/panel/`）。
+- **对话测试页**：面板内置「对话」，可选文本模型（流式）或图片模型（直接出图）快速验证，无需外部客户端。
+- **详细日志**：控制台与面板「日志」页都会输出每次调用：`key=<密钥> #<该密钥累计次数> model=<模型> in=<输入> out=<输出>`，覆盖 chat / messages / responses / images。
+- **Web 管理面板**：仪表盘、账号池、对话、密钥、模型列表、运行日志、在线改配置（白色液态玻璃风格，地址 `/panel/`）。
 - **签名复用**：直接复用 DeepSider 扩展的 `sign_wasm`（wasm-bindgen + wazero），生成 `i-sign`，无需逆向哈希算法。
 - **零配置构建**：GitHub Actions 自动构建 Docker 镜像与 Windows 单文件。
 
@@ -55,8 +57,12 @@ docker compose up -d
 
 ```bash
 cp config.example.json config.json
-go run ./cmd/server -config config.json
+go build -o deepsider2api ./cmd/server
+./deepsider2api -config config.json
 ```
+
+> `config.json` 的相对路径是**相对可执行文件所在目录**解析的（不是工作目录），所以配置和数据不会因启动方式 / 工作目录不同而"丢失"。
+> 用 `go run` 时请传绝对路径（否则会落到临时构建目录），例如 `go run ./cmd/server -config "$PWD/config.json"`。
 
 Windows 单文件：见 GitHub Actions 的 `Build Windows Package` 产物。
 
@@ -125,6 +131,37 @@ curl http://localhost:7863/v1/images/generations \
 | `login.enabled` | 是否允许面板「登录获取账号」 |
 | `login.page` | 交互登录页地址（默认 `https://web.deepsider.online`） |
 | `login.timeout_seconds` | 登录等待超时（默认 300 秒） |
+
+---
+
+## 管理面板
+
+访问 `http://<host>:7863/panel/`，用 `api_key` 登录。左侧页面：
+
+| 页面 | 作用 |
+| :--- | :--- |
+| 仪表盘 | 总请求 / 成功 / 失败、按模型统计、运行时长 |
+| 账号池 | 添加 / 启停 / 删除账号、刷新积分、查看邀请码、一键登录获取账号 |
+| 对话 | 选模型直接对话（文本流式 / 图片出图），用于测试 |
+| API 密钥 | 签发 / 停用 / 删除 `sk-...` 子密钥（仅存 SHA-256） |
+| 模型 | 浏览 DeepSider 全量模型（botId / 类型 / 积分） |
+| 日志 | 查看 / 清空运行日志（与控制台一致） |
+| 配置 | 在线修改监听地址、管理密钥、auto 编排与降级链 |
+
+## 端点一览
+
+| 端点 | 说明 |
+| :--- | :--- |
+| `GET /v1/models` | 模型列表（OpenAI 格式） |
+| `POST /v1/chat/completions` | 对话（流式 / 非流式） |
+| `POST /v1/messages` | Anthropic Messages（Claude Code 等） |
+| `POST /v1/responses` | OpenAI Responses |
+| `POST /v1/images/generations` | 图片生成 |
+| `GET /files/{name}` | 转存图片（`?download=1` 触发下载） |
+| `GET /healthz` | 健康检查 |
+| `GET /panel/` | 管理面板 |
+
+鉴权：请求头 `Authorization: Bearer <api_key 或 sk- 子密钥>`。
 
 ---
 
