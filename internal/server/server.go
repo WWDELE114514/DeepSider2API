@@ -123,6 +123,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /v1/chat/completions", s.auth(s.handleChat))
 	s.mux.HandleFunc("POST /v1/messages", s.auth(s.handleMessages))
 	s.mux.HandleFunc("POST /v1/responses", s.auth(s.handleResponses))
+	s.mux.HandleFunc("POST /v1/images/generations", s.auth(s.handleImageGenerations))
 
 	s.mux.HandleFunc("GET /api/panel/stats", s.admin(s.handleStats))
 	s.mux.HandleFunc("GET /api/panel/accounts", s.admin(s.handleListAccounts))

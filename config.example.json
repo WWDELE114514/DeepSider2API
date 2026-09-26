@@ -41,5 +41,8 @@
     "enabled": true,
     "page": "https://web.deepsider.online",
     "timeout_seconds": 300
+  },
+  "image": {
+    "default_model": "openai/gpt-image-2"
   }
 }

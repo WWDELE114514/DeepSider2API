@@ -26,6 +26,12 @@ type Config struct {
 	ModelFallback     map[string][]string `json:"model_fallback"`
 	SessionSticky     SessionSticky       `json:"session_sticky"`
 	Login             Login               `json:"login"`
+	Image             ImageConfig         `json:"image"`
+}
+
+// ImageConfig configures image generation.
+type ImageConfig struct {
+	DefaultModel string `json:"default_model"`
 }
 
 // Upstream describes how to talk to DeepSider.
@@ -109,6 +115,7 @@ func Default() Config {
 			Page:           "https://web.deepsider.online",
 			TimeoutSeconds: 300,
 		},
+		Image: ImageConfig{DefaultModel: "openai/gpt-image-2"},
 	}
 }
 
@@ -207,6 +214,9 @@ func (s *Store) normalizeLocked() {
 	}
 	if c.Login.TimeoutSeconds <= 0 {
 		c.Login.TimeoutSeconds = d.Login.TimeoutSeconds
+	}
+	if c.Image.DefaultModel == "" {
+		c.Image.DefaultModel = d.Image.DefaultModel
 	}
 }
 

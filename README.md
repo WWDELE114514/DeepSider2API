@@ -10,6 +10,7 @@
 
 - **OpenAI 兼容**：`GET /v1/models`、`POST /v1/chat/completions`（支持流式 SSE 与非流式）。
 - **多协议**：`POST /v1/messages`（Anthropic Messages，Claude Code 等）、`POST /v1/responses`（OpenAI Responses），与 chat 共用同一套账号池与调度。
+- **图片生成**：`POST /v1/images/generations`（OpenAI 兼容），复用 conversation 链路，从 202 帧的 markdown 里抠出图片 URL；`size` 自动映射 `imageOptions.resolution/ratio`。
 - **多账号池**：多个 DeepSider JWT 轮询、失败冷却熔断、积分/套餐状态刷新。
 - **API 密钥分发**：面板签发 `sk-...` 子密钥，可停用 / 删除，仅存 SHA-256。
 - **一键登录获取账号**：面板点「登录获取账号」→ 后台弹出**内嵌 WebView2 登录窗口**（独立 profile，不碰你的 Edge 数据）→ 你在官方登录页手动登录（Google / 邮箱）→ 自动拦截 `/user/login`、`/user/google-onetap-login` 响应抓取 `{token, refreshToken, email}` 并入池。登录页可配置。
@@ -90,6 +91,17 @@ curl http://localhost:7863/v1/responses \
   -d '{"model":"auto","input":"你好"}'
 ```
 
+### 图片生成
+
+```bash
+curl http://localhost:7863/v1/images/generations \
+  -H "Authorization: Bearer <你的密钥>" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"openai/gpt-image-2","prompt":"一只戴帽子的橘猫","size":"1024x1024"}'
+```
+
+`model` 填图片类 `botId`（`isDrawing:true`，可在面板「模型」页查看）；不填或填非 botId 时用 `image.default_model`。`size` 支持 `1024x1024` / `1792x1024` / `1024x1792` 等，也可直接传 `resolution`(`1k`/`2k`/`4k`) 和 `ratio`(`1:1`/`16:9`/`9:16`…)。
+
 ---
 
 ## 配置说明（config.json）
@@ -105,6 +117,7 @@ curl http://localhost:7863/v1/responses \
 | `pool.breaker_cooldown` | 冷却时长，如 `30m` |
 | `auto_model.enabled` | 是否启用 `auto` 虚拟模型昼夜切换 |
 | `auto_model.fallback` | 降级链（模型名数组） |
+| `image.default_model` | 图片接口未指定 botId 时用的默认图片模型（默认 `openai/gpt-image-2`） |
 | `login.enabled` | 是否允许面板「登录获取账号」 |
 | `login.page` | 交互登录页地址（默认 `https://web.deepsider.online`） |
 | `login.timeout_seconds` | 登录等待超时（默认 300 秒） |
