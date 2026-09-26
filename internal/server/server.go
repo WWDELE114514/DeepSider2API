@@ -34,6 +34,8 @@ type Server struct {
 	stats    *Stats
 	started  time.Time
 	mux      *http.ServeMux
+	filesDir string
+	http     *http.Client
 }
 
 // New builds the server and loads persisted state.
@@ -62,7 +64,10 @@ func New(cfg *config.Store, signer *sign.Signer) (*Server, error) {
 		stats:    NewStats(),
 		started:  time.Now(),
 		mux:      http.NewServeMux(),
+		filesDir: filepath.Join(dataDir, "images"),
+		http:     &http.Client{Timeout: 60 * time.Second},
 	}
+	s.cleanFiles()
 	s.loginMgr = login.New(cfg, func(res login.Result) error {
 		if existing, ok := p.FindByEmail(res.Email); ok {
 			p.SetTokens(existing.ID, res.Token, res.RefreshToken)
@@ -119,6 +124,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
+	s.mux.HandleFunc("GET /files/{name}", s.handleFile)
 	s.mux.HandleFunc("GET /v1/models", s.auth(s.handleModels))
 	s.mux.HandleFunc("POST /v1/chat/completions", s.auth(s.handleChat))
 	s.mux.HandleFunc("POST /v1/messages", s.auth(s.handleMessages))
@@ -526,6 +532,7 @@ func (s *Server) handlePanelModels(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePanelChat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Model    string        `json:"model"`
+		Kind     string        `json:"kind"`
 		Messages []chatMessage `json:"messages"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -555,6 +562,22 @@ func (s *Server) handlePanelChat(w http.ResponseWriter, r *http.Request) {
 		w.Write(b)
 		w.Write([]byte("\n\n"))
 		flusher.Flush()
+	}
+
+	if req.Kind == "image" {
+		prompt := lastUserText(req.Messages)
+		if prompt == "" {
+			send(map[string]interface{}{"error": "prompt is required"})
+			return
+		}
+		urls, err := s.generateImages(r.Context(), req.Model, prompt, "1k", "1:1")
+		if err != nil {
+			send(map[string]interface{}{"error": err.Error()})
+			return
+		}
+		items := s.materializeImages(r.Context(), r, urls)
+		send(map[string]interface{}{"images": items, "done": true, "model": req.Model})
+		return
 	}
 
 	text, used, err := s.runChat(r.Context(), req.Model, req.Messages, func(delta string) error {

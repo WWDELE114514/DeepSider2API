@@ -43,6 +43,9 @@
     "timeout_seconds": 300
   },
   "image": {
-    "default_model": "openai/gpt-image-2"
-  }
+    "default_model": "openai/gpt-image-2",
+    "persist": true,
+    "persist_ttl_hours": 72
+  },
+  "public_base_url": ""
 }

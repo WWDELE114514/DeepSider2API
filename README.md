@@ -11,6 +11,7 @@
 - **OpenAI 兼容**：`GET /v1/models`、`POST /v1/chat/completions`（支持流式 SSE 与非流式）。
 - **多协议**：`POST /v1/messages`（Anthropic Messages，Claude Code 等）、`POST /v1/responses`（OpenAI Responses），与 chat 共用同一套账号池与调度。
 - **图片生成**：`POST /v1/images/generations`（OpenAI 兼容），复用 conversation 链路，从 202 帧的 markdown 里抠出图片 URL；`size` 自动映射 `imageOptions.resolution/ratio`。
+- **图片转存 + 下载链接**：默认把图片下载到本地（`data/images/`）并返回网关永久链接（`url` + `download_url`），规避 DeepSider 24h 失效；可用 `image.persist=false` 关闭。
 - **多账号池**：多个 DeepSider JWT 轮询、失败冷却熔断、积分/套餐状态刷新。
 - **API 密钥分发**：面板签发 `sk-...` 子密钥，可停用 / 删除，仅存 SHA-256。
 - **一键登录获取账号**：面板点「登录获取账号」→ 后台弹出**内嵌 WebView2 登录窗口**（独立 profile，不碰你的 Edge 数据）→ 你在官方登录页手动登录（Google / 邮箱）→ 自动拦截 `/user/login`、`/user/google-onetap-login` 响应抓取 `{token, refreshToken, email}` 并入池。登录页可配置。
@@ -118,6 +119,9 @@ curl http://localhost:7863/v1/images/generations \
 | `auto_model.enabled` | 是否启用 `auto` 虚拟模型昼夜切换 |
 | `auto_model.fallback` | 降级链（模型名数组） |
 | `image.default_model` | 图片接口未指定 botId 时用的默认图片模型（默认 `openai/gpt-image-2`） |
+| `image.persist` | 是否把生成图片转存到本地并返回网关链接（默认 `true`） |
+| `image.persist_ttl_hours` | 转存图片保留小时数（默认 72） |
+| `public_base_url` | 返回的图片链接使用的外部地址（反代/公网部署时填，留空按请求 Host 推断） |
 | `login.enabled` | 是否允许面板「登录获取账号」 |
 | `login.page` | 交互登录页地址（默认 `https://web.deepsider.online`） |
 | `login.timeout_seconds` | 登录等待超时（默认 300 秒） |

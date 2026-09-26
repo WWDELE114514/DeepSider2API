@@ -27,11 +27,14 @@ type Config struct {
 	SessionSticky     SessionSticky       `json:"session_sticky"`
 	Login             Login               `json:"login"`
 	Image             ImageConfig         `json:"image"`
+	PublicBaseURL     string              `json:"public_base_url"`
 }
 
 // ImageConfig configures image generation.
 type ImageConfig struct {
-	DefaultModel string `json:"default_model"`
+	DefaultModel    string `json:"default_model"`
+	Persist         bool   `json:"persist"`
+	PersistTTLHours int    `json:"persist_ttl_hours"`
 }
 
 // Upstream describes how to talk to DeepSider.
@@ -115,7 +118,7 @@ func Default() Config {
 			Page:           "https://web.deepsider.online",
 			TimeoutSeconds: 300,
 		},
-		Image: ImageConfig{DefaultModel: "openai/gpt-image-2"},
+		Image: ImageConfig{DefaultModel: "openai/gpt-image-2", Persist: true, PersistTTLHours: 72},
 	}
 }
 
@@ -217,6 +220,9 @@ func (s *Store) normalizeLocked() {
 	}
 	if c.Image.DefaultModel == "" {
 		c.Image.DefaultModel = d.Image.DefaultModel
+	}
+	if c.Image.PersistTTLHours <= 0 {
+		c.Image.PersistTTLHours = d.Image.PersistTTLHours
 	}
 }
 

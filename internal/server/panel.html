@@ -343,16 +343,17 @@ let chatMessages = [];
 function loadChatModels(){
   api('/api/panel/models').then(d=>{
     const sel=$('#chatModel'); const cur=sel.value;
-    const models=(d.models||[]).filter(m=>{
-      if(m.disabled) return false;
-      if(m.isDrawing || m.asyncGenerateVideo) return false;
+    const models=(d.models||[]).filter(m=>!m.disabled);
+    const chat=[], image=[];
+    models.forEach(m=>{
       const c=String(m.classification||'').toLowerCase();
-      return c===''||c==='chat';
+      if(m.isDrawing || c==='image'){ image.push(m); }
+      else if(!m.asyncGenerateVideo && (c===''||c==='chat')){ chat.push(m); }
     });
-    sel.innerHTML='<option value="auto">auto（自动编排）</option>'+models.map(m=>{
-      const t=m.title||m.name||m.botId; const cr=(m.credits==null?0:m.credits);
-      return `<option value="${esc(m.botId)}">${esc(t)} · ${esc(m.botId)} · ${cr}分</option>`;
-    }).join('');
+    const opt=(m,kind)=>{const t=m.title||m.name||m.botId;const cr=(m.credits==null?0:m.credits);return `<option data-kind="${kind}" value="${esc(m.botId)}">${esc(t)} · ${esc(m.botId)} · ${cr}分</option>`;};
+    sel.innerHTML='<option data-kind="chat" value="auto">auto（自动编排）</option>'
+      +'<optgroup label="文本对话">'+chat.map(m=>opt(m,'chat')).join('')+'</optgroup>'
+      +'<optgroup label="图片生成">'+image.map(m=>opt(m,'image')).join('')+'</optgroup>';
     if(cur) sel.value=cur;
   }).catch(e=>toast('加载模型失败: '+e.message));
 }
@@ -360,7 +361,11 @@ function renderChat(){
   const box=$('#chatBox');
   box.innerHTML=chatMessages.map(m=>{
     const who=m.role==='user'?'我':'AI';
-    const body=esc(m.content)||'<span class="muted">…</span>';
+    let body=esc(m.content);
+    if(m.images && m.images.length){
+      body+=m.images.map(im=>`<div style="margin-top:8px"><img src="${esc(im.url)}" style="max-width:100%;border-radius:10px;border:1px solid rgba(15,23,42,.1)"/><div><a href="${esc(im.download_url||im.url)}" target="_blank" rel="noreferrer">下载图片</a></div></div>`).join('');
+    }
+    if(!body) body='<span class="muted">…</span>';
     return `<div style="margin-bottom:12px"><div class="muted" style="font-size:12px">${who}</div><div style="white-space:pre-wrap">${body}</div></div>`;
   }).join('')||'<div class="muted">选择模型后开始对话测试…</div>';
   box.scrollTop=box.scrollHeight;
@@ -373,13 +378,15 @@ async function sendChat(){
   chatMessages.push({role:'user',content:text});
   chatMessages.push({role:'assistant',content:''});
   renderChat();
+  const opt=$('#chatModel').selectedOptions[0];
+  const kind=(opt&&opt.dataset.kind)||'chat';
   const model=$('#chatModel').value||'auto';
   $('#chatSend').disabled=true;
   try{
     const resp=await fetch('/api/panel/chat',{
       method:'POST',
       headers:{'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},
-      body:JSON.stringify({model, messages:chatMessages.slice(0,-1)})
+      body:JSON.stringify({model, kind, messages:chatMessages.slice(0,-1)})
     });
     if(!resp.ok) throw new Error((await resp.text())||('HTTP '+resp.status));
     const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf='';
@@ -393,6 +400,7 @@ async function sendChat(){
         try{
           const j=JSON.parse(line.slice(5).trim());
           if(j.delta){ chatMessages[chatMessages.length-1].content+=j.delta; renderChat(); }
+          if(j.images){ chatMessages[chatMessages.length-1].images=j.images; renderChat(); }
           if(j.error){ chatMessages[chatMessages.length-1].content+='\n[错误] '+j.error; renderChat(); }
         }catch(e){}
       }

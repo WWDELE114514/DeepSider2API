@@ -79,6 +79,17 @@ func buildPrompt(msgs []chatMessage) string {
 	return strings.TrimSpace(b.String())
 }
 
+func lastUserText(msgs []chatMessage) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" {
+			if t := strings.TrimSpace(extractText(msgs[i].Content)); t != "" {
+				return t
+			}
+		}
+	}
+	return ""
+}
+
 func (s *Server) resolveModel(model string) string {
 	cfg := s.cfg.Get()
 	if !cfg.AutoModel.Enabled {
