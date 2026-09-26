@@ -22,37 +22,51 @@ import (
 // process-wide environment variable.
 var captureMutex sync.Mutex
 
-// hookScriptWebview patches fetch/XHR and forwards the first captured token
-// pair to the Go side through the bound ds2apiCapture function.
+// hookScriptWebview patches fetch/XHR, recursively looks for a token in login
+// responses, and additionally polls IndexedDB/localStorage (localforage) every
+// two seconds. Anything found is forwarded to Go through ds2apiCapture.
 const hookScriptWebview = `(function(){
   if (window.__DS2API_HOOKED__) return; window.__DS2API_HOOKED__ = true;
+
   function norm(s){ return String(s == null ? '' : s).replace(/\s/g, ''); }
-  function report(d){
-    try {
-      if (!d) return;
-      var token = d.token || d.accessToken || d.access_token;
-      if (!token) return;
-      window.ds2apiCapture(JSON.stringify({
-        token: norm(token),
-        refreshToken: norm(d.refreshToken || d.refresh_token || ''),
-        email: d.email || ''
-      }));
-    } catch (e) {}
+  function log(m){ try { window.ds2apiLog(String(m)); } catch(e){} }
+
+  function findToken(o, depth){
+    if (!o || depth > 6) return null;
+    if (typeof o === 'string') {
+      var t = o.trim();
+      if (t.charAt(0) === '{' || t.charAt(0) === '[') { try { return findToken(JSON.parse(t), depth+1); } catch(e){ return null; } }
+      return null;
+    }
+    if (typeof o !== 'object') return null;
+    var tok = o.token || o.accessToken || o.access_token;
+    if (tok && typeof tok === 'string' && tok.length > 20) {
+      return { token: norm(tok), refreshToken: norm(o.refreshToken || o.refresh_token || ''), email: o.email || o.mail || '' };
+    }
+    for (var k in o) { try { var r = findToken(o[k], depth+1); if (r) return r; } catch(e){} }
+    return null;
   }
-  function pick(obj){ try { report(obj && obj.data ? obj.data : obj); } catch (e) {} }
-  function isTarget(u){
-    if (!u) return false; u = String(u);
-    return u.indexOf('/user/login') >= 0
-        || u.indexOf('/user/google-onetap-login') >= 0
-        || u.indexOf('/user/google-login') >= 0
-        || u.indexOf('/user/refreshtoken') >= 0;
+
+  function report(r){
+    if (!r || !r.token) return;
+    window.__DS2API_TOKEN__ = r;
+    try { window.ds2apiCapture(JSON.stringify(r)); } catch(e){}
   }
+  function inspect(obj){ try { var r = findToken(obj, 0); if (r) report(r); } catch(e){} }
+
+  function isLoginUrl(u){ if(!u) return false; u = String(u); return u.indexOf('/user/') >= 0 || u.indexOf('login') >= 0; }
+
   var of = window.fetch;
   if (of) {
     window.fetch = function(input, init){
       var url = (typeof input === 'string') ? input : (input && input.url);
       return of.apply(this, arguments).then(function(res){
-        try { if (isTarget(url || (res && res.url))) { res.clone().json().then(pick).catch(function(){}); } } catch (e) {}
+        try {
+          if (isLoginUrl(url || (res && res.url))) {
+            log('fetch ' + res.status + ' ' + (url || res.url));
+            res.clone().json().then(inspect).catch(function(){});
+          }
+        } catch (e) {}
         return res;
       });
     };
@@ -64,11 +78,53 @@ const hookScriptWebview = `(function(){
     var self = this;
     try {
       this.addEventListener('load', function(){
-        try { if (isTarget(self.__ds2api_url || self.responseURL)) { pick(JSON.parse(self.responseText)); } } catch (e) {}
+        try {
+          var u = self.__ds2api_url || self.responseURL;
+          if (isLoginUrl(u)) { log('xhr ' + self.status + ' ' + u); inspect(JSON.parse(self.responseText)); }
+        } catch (e) {}
       });
     } catch (e) {}
     return os.apply(this, arguments);
   };
+
+  var db = null;
+  function openDB(){
+    try {
+      var req = indexedDB.open('localforage');
+      req.onsuccess = function(e){ db = e.target.result; };
+      req.onerror = function(){};
+    } catch(e){}
+  }
+  openDB();
+
+  function scanStorage(){
+    try {
+      for (var i=0;i<localStorage.length;i++){
+        var v = localStorage.getItem(localStorage.key(i));
+        if (v && v.indexOf('token') >= 0) { try { inspect(JSON.parse(v)); } catch(e){} }
+      }
+    } catch(e){}
+    try {
+      if (!db) { openDB(); return; }
+      var names = db.objectStoreNames;
+      for (var n=0;n<names.length;n++){
+        (function(name){
+          try {
+            var store = db.transaction(name, 'readonly').objectStore(name);
+            var all = store.getAll();
+            all.onsuccess = function(){ var arr = all.result || []; for (var j=0;j<arr.length;j++){ inspect(arr[j]); } };
+          } catch(e){}
+        })(names[n]);
+      }
+    } catch(e){}
+  }
+
+  setInterval(function(){
+    try { if (window.__DS2API_TOKEN__ && window.__DS2API_TOKEN__.token) { report(window.__DS2API_TOKEN__); return; } } catch(e){}
+    scanStorage();
+  }, 2000);
+
+  log('hook installed');
 })();`
 
 func capture(ctx context.Context, lc config.Login) (Result, error) {
@@ -116,11 +172,15 @@ func capture(ctx context.Context, lc config.Login) (Result, error) {
 				r.RefreshToken = strings.TrimSpace(r.RefreshToken)
 				select {
 				case resultCh <- r:
+					go w.Terminate()
 				default:
 				}
-				go w.Terminate()
 			}
 			return "ok"
+		})
+		_ = w.Bind("ds2apiLog", func(msg string) string {
+			log.Printf("[login][page] %s", msg)
+			return ""
 		})
 
 		w.Init(hookScriptWebview)
