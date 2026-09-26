@@ -22,6 +22,7 @@
 - **详细日志**：控制台与面板「日志」页都会输出每次调用：`key=<密钥> #<该密钥累计次数> model=<模型> in=<输入> out=<输出>`，覆盖 chat / messages / responses / images。
 - **Web 管理面板**：仪表盘、账号池、对话、密钥、模型列表、运行日志、在线改配置（白色液态玻璃风格，地址 `/panel/`）。
 - **MCP server**：附送 `deepsider2api-mcp.exe`（stdio），让 AI 客户端直接查账号/总积分/邀请码/模型，并选择账号+模型生成图片。
+- **配套 AstrBot 插件**：[DeepSider2API-AstrBot](https://github.com/WWDELE114514/DeepSider2API-AstrBot) —— 在 QQ / 微信等 AstrBot 机器人里查积分/邀请码、按账号与模型生成图片。
 - **签名复用**：直接复用 DeepSider 扩展的 `sign_wasm`（wasm-bindgen + wazero），生成 `i-sign`，无需逆向哈希算法。
 - **零配置构建**：GitHub Actions 自动构建 Docker 镜像与 Windows 单文件。
 
