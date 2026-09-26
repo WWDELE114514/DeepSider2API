@@ -54,9 +54,9 @@ func main() {
 	), handleGetInvitation)
 
 	s.AddTool(mcp.NewTool("generate_image",
-		mcp.WithDescription("用 DeepSider 生成图片，可指定账号与模型，返回图片 URL 与下载链接。"),
+		mcp.WithDescription("用 DeepSider 生成图片。重要：如果用户在请求里指定了模型（例如 openai/gpt-image-2），必须把该模型原样填入 model 参数，禁止替换成其它模型。"),
 		mcp.WithString("prompt", mcp.Required(), mcp.Description("图片描述")),
-		mcp.WithString("model", mcp.Description("图片模型 botId，如 pro/gemini-3.1-flash-lite-image；留空用默认")),
+		mcp.WithString("model", mcp.Description("图片模型 botId，例如 openai/gpt-image-2、qwen/qwen-image、pro/gemini-3.1-flash-lite-image。用户指定了模型时必须原样使用；只有用户完全没指定模型时才留空（用网关默认）")),
 		mcp.WithString("account", mcp.Description("指定账号邮箱或 id；留空自动选账号")),
 		mcp.WithString("size", mcp.Description("OpenAI size，如 1024x1024")),
 		mcp.WithString("resolution", mcp.Description("1k / 2k / 4k")),
