@@ -71,9 +71,34 @@ func (s *Server) resolveImageModel(model string) string {
 }
 
 // generateImages runs the model chain over the account pool and returns the
-// raw image URLs reported by DeepSider.
-func (s *Server) generateImages(ctx context.Context, model, prompt, resolution, ratio string) ([]string, error) {
+// raw image URLs reported by DeepSider. When accountID is set (id or email)
+// only that account is used.
+func (s *Server) generateImages(ctx context.Context, model, prompt, resolution, ratio, accountID string) ([]string, error) {
 	body := s.imageBody(model, prompt, resolution, ratio)
+
+	if accountID != "" {
+		acc, ok := s.pool.Get(accountID)
+		if !ok {
+			if a, ok2 := s.pool.FindByEmail(accountID); ok2 {
+				acc = a
+			} else {
+				return nil, fmt.Errorf("account not found: %s", accountID)
+			}
+		}
+		result, err := s.upstream.GenerateImage(ctx, acc.Token, body)
+		if err != nil {
+			s.pool.MarkFailure(acc.ID, err.Error())
+			return nil, err
+		}
+		if len(result.URLs) == 0 {
+			err := fmt.Errorf("no image url returned (model may have been blocked by safety filter)")
+			s.pool.MarkFailure(acc.ID, err.Error())
+			return nil, err
+		}
+		s.pool.MarkSuccess(acc.ID)
+		return result.URLs, nil
+	}
+
 	attempts := s.maxAttempts()
 	var lastErr error
 
@@ -257,7 +282,7 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 	model := s.resolveImageModel(req.Model)
 	resolution, ratio := mapSize(req.Size, req.Resolution, req.Ratio)
 
-	urls, err := s.generateImages(r.Context(), model, req.Prompt, resolution, ratio)
+	urls, err := s.generateImages(r.Context(), model, req.Prompt, resolution, ratio, "")
 	if err != nil {
 		s.stats.Request("image:"+model, false, 0)
 		caller := callerFrom(r.Context())
@@ -277,4 +302,39 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 	caller := callerFrom(r.Context())
 	n := s.stats.IncCaller(caller.Name)
 	s.stats.Log("info", fmt.Sprintf("key=%s #%d model=%s in=%q images=%d", caller.Name, n, model, truncateRunes(req.Prompt, 150), len(urls)))
+}
+
+// handlePanelGenerate generates an image for the panel / MCP caller, optionally
+// pinned to a specific account (id or email).
+func (s *Server) handlePanelGenerate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Account    string `json:"account"`
+		Model      string `json:"model"`
+		Prompt     string `json:"prompt"`
+		Size       string `json:"size"`
+		Resolution string `json:"resolution"`
+		Ratio      string `json:"ratio"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		http.Error(w, "prompt is required", http.StatusBadRequest)
+		return
+	}
+	model := s.resolveImageModel(req.Model)
+	resolution, ratio := mapSize(req.Size, req.Resolution, req.Ratio)
+
+	urls, err := s.generateImages(r.Context(), model, req.Prompt, resolution, ratio, req.Account)
+	if err != nil {
+		s.stats.Log("error", fmt.Sprintf("panel image failed model=%s account=%s: %v", model, req.Account, err))
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	s.stats.Log("info", fmt.Sprintf("panel image ok model=%s account=%s images=%d", model, req.Account, len(urls)))
+	writeJSON(w, map[string]interface{}{
+		"model": model,
+		"data":  s.materializeImages(r.Context(), r, urls),
+	})
 }

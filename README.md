@@ -21,6 +21,7 @@
 - **对话测试页**：面板内置「对话」，可选文本模型（流式）或图片模型（直接出图）快速验证，无需外部客户端。
 - **详细日志**：控制台与面板「日志」页都会输出每次调用：`key=<密钥> #<该密钥累计次数> model=<模型> in=<输入> out=<输出>`，覆盖 chat / messages / responses / images。
 - **Web 管理面板**：仪表盘、账号池、对话、密钥、模型列表、运行日志、在线改配置（白色液态玻璃风格，地址 `/panel/`）。
+- **MCP server**：附送 `deepsider2api-mcp.exe`（stdio），让 AI 客户端直接查账号/总积分/邀请码/模型，并选择账号+模型生成图片。
 - **签名复用**：直接复用 DeepSider 扩展的 `sign_wasm`（wasm-bindgen + wazero），生成 `i-sign`，无需逆向哈希算法。
 - **零配置构建**：GitHub Actions 自动构建 Docker 镜像与 Windows 单文件。
 
@@ -162,6 +163,47 @@ curl http://localhost:7863/v1/images/generations \
 | `GET /panel/` | 管理面板 |
 
 鉴权：请求头 `Authorization: Bearer <api_key 或 sk- 子密钥>`。
+
+---
+
+## MCP（让 AI 直接用）
+
+`deepsider2api-mcp.exe` 是一个 **MCP stdio server**，让支持 MCP 的 AI 客户端直接查询账号 / 积分 / 邀请码 / 模型并生成图片。它通过 HTTP 调用正在运行的网关。
+
+配置（环境变量，均可选）：
+- `DEEPSIDER_BASE_URL`：网关地址，默认 `http://127.0.0.1:7863`
+- `DEEPSIDER_API_KEY`：管理密钥，默认读取**同目录 `config.json`** 的 `api_key`
+
+提供的工具：
+
+| 工具 | 作用 |
+| :--- | :--- |
+| `list_accounts` | 各账号邮箱、剩余积分、套餐、启用状态、失败次数 |
+| `total_credits` | 启用账号的剩余积分总和 |
+| `list_models` | 模型列表（`type` 可按 `chat`/`image`/`video` 过滤） |
+| `get_invitation` | 指定账号的邀请码 / 链接 / 邀请统计 |
+| `generate_image` | 生成图片（可指定 `account` 与 `model`），返回图片 URL 与下载链接 |
+| `chat` | 文本对话（非流式） |
+
+客户端配置示例（opencode / Claude Desktop 等）：
+
+```json
+{
+  "mcp": {
+    "deepsider": {
+      "type": "local",
+      "command": ["E:\\DeepSider2api\\run\\deepsider2api-mcp.exe"],
+      "environment": {
+        "DEEPSIDER_BASE_URL": "http://127.0.0.1:7863",
+        "DEEPSIDER_API_KEY": "change_me"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+> 需先启动网关（`deepsider2api.exe`），且把 `deepsider2api-mcp.exe` 放在与 `config.json` 相同的目录（或显式设置环境变量）。
 
 ---
 

@@ -152,6 +152,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/panel/config", s.admin(s.handleSetConfig))
 	s.mux.HandleFunc("GET /api/panel/models", s.admin(s.handlePanelModels))
 	s.mux.HandleFunc("POST /api/panel/chat", s.admin(s.handlePanelChat))
+	s.mux.HandleFunc("POST /api/panel/generate", s.admin(s.handlePanelGenerate))
 	s.mux.HandleFunc("GET /api/panel/logs", s.admin(s.handleLogs))
 	s.mux.HandleFunc("DELETE /api/panel/logs", s.admin(s.handleClearLogs))
 
@@ -398,7 +399,16 @@ func (s *Server) refreshAccount(ctx context.Context, id string) error {
 }
 
 func (s *Server) handleInvitation(w http.ResponseWriter, r *http.Request) {
-	acc, ok := s.pool.Get(r.URL.Query().Get("id"))
+	key := r.URL.Query().Get("id")
+	if key == "" {
+		key = r.URL.Query().Get("account")
+	}
+	acc, ok := s.pool.Get(key)
+	if !ok {
+		if a, ok2 := s.pool.FindByEmail(key); ok2 {
+			acc, ok = a, true
+		}
+	}
 	if !ok {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -560,6 +570,7 @@ func (s *Server) handlePanelChat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Model    string        `json:"model"`
 		Kind     string        `json:"kind"`
+		Account  string        `json:"account"`
 		Messages []chatMessage `json:"messages"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -597,7 +608,7 @@ func (s *Server) handlePanelChat(w http.ResponseWriter, r *http.Request) {
 			send(map[string]interface{}{"error": "prompt is required"})
 			return
 		}
-		urls, err := s.generateImages(r.Context(), req.Model, prompt, "1k", "1:1")
+		urls, err := s.generateImages(r.Context(), req.Model, prompt, "1k", "1:1", req.Account)
 		if err != nil {
 			send(map[string]interface{}{"error": err.Error()})
 			return
