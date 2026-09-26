@@ -116,14 +116,23 @@ func Default() Config {
 type Store struct {
 	mu   sync.RWMutex
 	path string
+	dir  string
 	cfg  Config
 }
 
+// BaseDir is the directory relative data paths are resolved against (the
+// directory holding the config file).
+func (s *Store) BaseDir() string { return s.dir }
+
 // Load reads config from path, creating a default file when missing.
 func Load(path string) (*Store, error) {
-	s := &Store{path: path, cfg: Default()}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	s := &Store{path: abs, dir: filepath.Dir(abs), cfg: Default()}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(abs)
 	if err != nil {
 		if os.IsNotExist(err) {
 			if err := s.saveLocked(); err != nil {
@@ -134,7 +143,7 @@ func Load(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(data, &s.cfg); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, fmt.Errorf("parse %s: %w", abs, err)
 	}
 	s.normalizeLocked()
 	return s, nil

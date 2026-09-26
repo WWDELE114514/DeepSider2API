@@ -39,8 +39,10 @@ type Server struct {
 // New builds the server and loads persisted state.
 func New(cfg *config.Store, signer *sign.Signer) (*Server, error) {
 	snap := cfg.Get()
-	accountsPath := filepath.Join(snap.DataDir, "accounts.json")
-	keysPath := filepath.Join(snap.DataDir, "keys.json")
+	base := cfg.BaseDir()
+	dataDir := resolvePath(base, snap.DataDir)
+	accountsPath := filepath.Join(dataDir, "accounts.json")
+	keysPath := filepath.Join(dataDir, "keys.json")
 
 	p := pool.New(accountsPath, snap.Pool.BreakerThreshold, parseDuration(snap.Pool.BreakerCooldown, 30*time.Minute))
 	if err := p.Load(); err != nil {
@@ -86,6 +88,17 @@ func parseDuration(s string, fallback time.Duration) time.Duration {
 		return d
 	}
 	return fallback
+}
+
+// resolvePath resolves a possibly relative data path against base.
+func resolvePath(base, p string) string {
+	if p == "" {
+		return base
+	}
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(base, p)
 }
 
 // Handler exposes the underlying http.Handler.

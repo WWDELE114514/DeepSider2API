@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -29,10 +30,19 @@ func panelURL(listen string) string {
 }
 
 func main() {
-	configPath := flag.String("config", "config.json", "path to config.json")
+	configPath := flag.String("config", "config.json", "path to config.json (relative paths are resolved next to the executable)")
 	flag.Parse()
 
-	store, err := config.Load(*configPath)
+	// Anchor the config file to the executable directory so that the working
+	// directory does not change which config (and data) is used.
+	path := *configPath
+	if !filepath.IsAbs(path) {
+		if exe, err := os.Executable(); err == nil {
+			path = filepath.Join(filepath.Dir(exe), path)
+		}
+	}
+
+	store, err := config.Load(path)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
