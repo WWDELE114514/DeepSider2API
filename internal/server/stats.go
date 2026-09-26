@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -41,14 +42,15 @@ func (s *Stats) IncCaller(name string) int64 {
 	return s.PerCaller[name]
 }
 
-// Log appends a log entry to the ring buffer.
+// Log appends a log entry to the ring buffer and also prints it to the console.
 func (s *Stats) Log(level, message string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.Recent = append(s.Recent, LogEntry{Time: time.Now(), Level: level, Message: message})
 	if len(s.Recent) > s.maxLogs {
 		s.Recent = s.Recent[len(s.Recent)-s.maxLogs:]
 	}
+	s.mu.Unlock()
+	log.Printf("[%s] %s", level, message)
 }
 
 // Request records the outcome of a chat request.
