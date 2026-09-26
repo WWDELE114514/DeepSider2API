@@ -16,8 +16,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The interactive login uses the WebView2 webview binding, which requires
+    # cgo, so the Windows binary must be built on a Windows runner.
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -26,27 +28,40 @@ jobs:
           go-version: '1.22'
           cache: true
 
+      - name: Ensure MinGW (g++) is available
+        shell: pwsh
+        run: |
+          $mingw = "C:\msys64\mingw64\bin"
+          if (-not (Test-Path "$mingw\g++.exe")) {
+            C:\msys64\usr\bin\bash.exe -lc "pacman -S --noconfirm --needed mingw-w64-x86_64-gcc"
+          }
+          Add-Content $env:GITHUB_PATH $mingw
+          & "$mingw\g++.exe" --version | Select-Object -First 1
+
       - name: Tidy modules
         run: go mod tidy
 
       - name: Test
+        env:
+          CGO_ENABLED: '1'
         run: go test -timeout 5m ./...
 
       - name: Build Windows executable
+        shell: pwsh
         env:
-          GOOS: windows
-          GOARCH: amd64
-          CGO_ENABLED: '0'
+          CGO_ENABLED: '1'
         run: |
-          mkdir -p dist
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
           go build -trimpath -tags timetzdata -ldflags="-s -w" -o dist/deepsider2api.exe ./cmd/server
 
       - name: Package
+        shell: pwsh
         run: |
-          cp config.example.json LICENSE dist/
-          printf '%s\n' "$GITHUB_SHA" > dist/BUILD_COMMIT.txt
-          cd dist
-          sha256sum *.exe > SHA256SUMS.txt
+          Copy-Item config.example.json dist/
+          Copy-Item LICENSE dist/
+          "${{ github.sha }}" | Out-File -Encoding ascii -NoNewline dist/BUILD_COMMIT.txt
+          $hash = (Get-FileHash dist/deepsider2api.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  deepsider2api.exe" | Out-File -Encoding ascii dist/SHA256SUMS.txt
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4

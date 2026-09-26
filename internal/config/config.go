@@ -64,15 +64,12 @@ type SessionSticky struct {
 }
 
 // Login configures the interactive account acquisition flow. The gateway opens
-// a real browser (incognito) at Page, the user signs in manually, and the
+// an embedded webview window at Page, the user signs in manually, and the
 // response of the login endpoint is captured to obtain the JWT.
 type Login struct {
 	Enabled        bool   `json:"enabled"`
 	Page           string `json:"page"`
-	BrowserPath    string `json:"browser_path"`
-	ExtensionPath  string `json:"extension_path"`
 	TimeoutSeconds int    `json:"timeout_seconds"`
-	Incognito      bool   `json:"incognito"`
 }
 
 // Default returns a configuration with sensible DeepSider defaults.
@@ -111,7 +108,6 @@ func Default() Config {
 			Enabled:        true,
 			Page:           "https://web.deepsider.online",
 			TimeoutSeconds: 300,
-			Incognito:      true,
 		},
 	}
 }

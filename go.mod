@@ -3,6 +3,6 @@ module github.com/WWDELE114514/DeepSider2API
 go 1.22
 
 require (
-	github.com/chromedp/chromedp v0.11.2
 	github.com/tetratelabs/wazero v1.8.2
+	github.com/webview/webview_go v0.0.0-20240831120633-6173450d4dd6
 )

@@ -1,28 +1,20 @@
-// Package login acquires DeepSider credentials interactively: it opens a real
-// browser window (incognito), lets the user sign in on the official login page,
-// and captures the JWT from the response of the login endpoints by injecting a
-// fetch/XHR hook into the page.
+// Package login acquires DeepSider credentials interactively: it opens an
+// embedded webview window, lets the user sign in on the official login page,
+// and captures the JWT from the response of the login endpoints via a JS hook.
+//
+// The browser engine is provided by the platform webview (WebView2 on Windows).
+// capture is implemented per platform with build tags.
 package login
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
-	"os"
-	"os/exec"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/chromedp"
 
 	"github.com/WWDELE114514/DeepSider2API/internal/config"
 )
@@ -155,9 +147,8 @@ func (m *Manager) run(ctx context.Context, s *Session) {
 	m.mu.Unlock()
 }
 
-// captureSafe isolates the browser automation so that any panic (chromedp is
-// not fully panic safe on every platform) is reported instead of crashing the
-// whole gateway process.
+// captureSafe isolates the browser automation so that any panic is reported
+// instead of crashing the whole gateway process.
 func (m *Manager) captureSafe(ctx context.Context) (res Result, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -172,239 +163,4 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "...(truncated)"
-}
-
-// hookScript patches fetch/XHR and stores the first captured token pair on
-// window.__DS2API_TOKEN__.
-const hookScript = `(function(){
-  if (window.__DS2API_HOOKED__) return; window.__DS2API_HOOKED__ = true;
-  function norm(s){ return String(s == null ? '' : s).replace(/\s/g, ''); }
-  function pick(obj){
-    try {
-      var d = (obj && obj.data) ? obj.data : obj;
-      if (!d) return;
-      var token = d.token || d.accessToken || d.access_token;
-      if (!token) return;
-      window.__DS2API_TOKEN__ = {
-        token: norm(token),
-        refreshToken: norm(d.refreshToken || d.refresh_token || ''),
-        email: d.email || ''
-      };
-    } catch (e) {}
-  }
-  function isTarget(u){
-    if (!u) return false; u = String(u);
-    return u.indexOf('/user/login') >= 0
-        || u.indexOf('/user/google-onetap-login') >= 0
-        || u.indexOf('/user/google-login') >= 0
-        || u.indexOf('/user/refreshtoken') >= 0;
-  }
-  var of = window.fetch;
-  if (of) {
-    window.fetch = function(input, init){
-      var url = (typeof input === 'string') ? input : (input && input.url);
-      return of.apply(this, arguments).then(function(res){
-        try { if (isTarget(url || (res && res.url))) { res.clone().json().then(pick).catch(function(){}); } } catch (e) {}
-        return res;
-      });
-    };
-  }
-  var oo = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(m, u){ try { this.__ds2api_url = u; } catch (e) {} return oo.apply(this, arguments); };
-  var os = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.send = function(){
-    var self = this;
-    try {
-      this.addEventListener('load', function(){
-        try { if (isTarget(self.__ds2api_url || self.responseURL)) { pick(JSON.parse(self.responseText)); } } catch (e) {}
-      });
-    } catch (e) {}
-    return os.apply(this, arguments);
-  };
-})();`
-
-func capture(ctx context.Context, lc config.Login) (Result, error) {
-	dir, err := os.MkdirTemp("", "ds2api-login-")
-	if err != nil {
-		return Result{}, err
-	}
-	defer os.RemoveAll(dir)
-
-	runCtx, cleanup, err := launchEdge(ctx, lc, dir)
-	if err != nil {
-		return Result{}, err
-	}
-	defer cleanup()
-
-	if err := chromedp.Run(runCtx, chromedp.ActionFunc(func(ctx context.Context) error {
-		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
-		return err
-	})); err != nil {
-		return Result{}, fmt.Errorf("注入脚本失败: %w", err)
-	}
-
-	log.Printf("[login] 打开登录页: %s", lc.Page)
-	if err := chromedp.Run(runCtx, chromedp.Navigate(lc.Page)); err != nil {
-		return Result{}, fmt.Errorf("打开登录页失败: %w", err)
-	}
-	log.Printf("[login] 登录页已打开，等待用户完成登录…")
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return Result{}, fmt.Errorf("登录超时或已取消")
-		case <-ticker.C:
-			var raw string
-			evalCtx, cancelEval := context.WithTimeout(runCtx, 5*time.Second)
-			err := chromedp.Run(evalCtx, chromedp.Evaluate(`JSON.stringify(window.__DS2API_TOKEN__ || null)`, &raw))
-			cancelEval()
-			if err != nil || raw == "" || raw == "null" {
-				continue
-			}
-			var r Result
-			if json.Unmarshal([]byte(raw), &r) == nil && strings.TrimSpace(r.Token) != "" {
-				r.Token = strings.TrimSpace(r.Token)
-				r.RefreshToken = strings.TrimSpace(r.RefreshToken)
-				return r, nil
-			}
-		}
-	}
-}
-
-type browserVersion struct {
-	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
-}
-
-// launchEdge starts Edge itself and then attaches chromedp through its CDP
-// endpoint. chromedp's built-in Windows launcher can leave a visible Edge
-// window on about:blank while failing to attach, hence this explicit path.
-func launchEdge(ctx context.Context, lc config.Login, userDataDir string) (context.Context, func(), error) {
-	browser := browserPath(lc)
-	if browser == "" {
-		return nil, nil, fmt.Errorf("未找到 Edge；请在 login.browser_path 指定 msedge.exe")
-	}
-
-	port, err := availablePort()
-	if err != nil {
-		return nil, nil, fmt.Errorf("分配 Edge 调试端口失败: %w", err)
-	}
-
-	args := []string{
-		"--remote-debugging-address=127.0.0.1",
-		fmt.Sprintf("--remote-debugging-port=%d", port),
-		"--remote-allow-origins=*",
-		"--user-data-dir=" + userDataDir,
-		"--no-first-run",
-		"--no-default-browser-check",
-		"--disable-popup-blocking",
-		"--new-window",
-		"about:blank",
-	}
-	if lc.Incognito {
-		args = append(args, "--inprivate")
-	}
-	if lc.ExtensionPath != "" {
-		args = append(args,
-			"--disable-extensions-except="+lc.ExtensionPath,
-			"--load-extension="+lc.ExtensionPath,
-		)
-	}
-
-	cmd := exec.CommandContext(ctx, browser, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return nil, nil, fmt.Errorf("启动 Edge 失败: %w", err)
-	}
-
-	cleanup := func() {
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			_, _ = cmd.Process.Wait()
-		}
-	}
-
-	log.Printf("[login] 已启动 Edge%s，正在连接浏览器…", map[bool]string{true: " 隐私窗口", false: ""}[lc.Incognito])
-	wsURL, err := waitForCDP(ctx, port)
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("Edge 调试连接失败: %w；stderr: %s", err, truncate(stderr.String(), 500))
-	}
-
-	allocCtx, cancelAlloc := chromedp.NewRemoteAllocator(ctx, wsURL)
-	runCtx, cancelRun := chromedp.NewContext(allocCtx)
-	return runCtx, func() {
-		cancelRun()
-		cancelAlloc()
-		cleanup()
-	}, nil
-}
-
-func availablePort() (int, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port, nil
-}
-
-func waitForCDP(ctx context.Context, port int) (string, error) {
-	endpoint := fmt.Sprintf("http://127.0.0.1:%d/json/version", port)
-	client := &http.Client{Timeout: time.Second}
-	deadline := time.NewTimer(12 * time.Second)
-	defer deadline.Stop()
-	ticker := time.NewTicker(150 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-deadline.C:
-			return "", fmt.Errorf("12 秒内没有出现 CDP 端点 %s", endpoint)
-		case <-ticker.C:
-			resp, err := client.Get(endpoint)
-			if err != nil {
-				continue
-			}
-			var version browserVersion
-			err = json.NewDecoder(resp.Body).Decode(&version)
-			resp.Body.Close()
-			if err == nil && version.WebSocketDebuggerURL != "" {
-				return version.WebSocketDebuggerURL, nil
-			}
-		}
-	}
-}
-
-func browserPath(lc config.Login) string {
-	candidates := []string{
-		lc.BrowserPath,
-		os.Getenv("DS2API_BROWSER"),
-		// Edge first (DeepSider extension lives in Edge), Chrome as fallback.
-		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
-		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
-		`C:\Program Files\Google\Chrome\Application\chrome.exe`,
-		`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
-		"/usr/bin/microsoft-edge",
-		"/usr/bin/microsoft-edge-stable",
-		"/usr/bin/google-chrome",
-		"/usr/bin/google-chrome-stable",
-		"/usr/bin/chromium",
-		"/usr/bin/chromium-browser",
-		"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-		"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-	}
-	for _, c := range candidates {
-		if c == "" {
-			continue
-		}
-		if st, err := os.Stat(c); err == nil && !st.IsDir() {
-			return c
-		}
-	}
-	return ""
 }
