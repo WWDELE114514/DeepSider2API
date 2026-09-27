@@ -217,7 +217,9 @@ func (s *Server) runChat(ctx context.Context, model string, messages []chatMessa
 				// Response already partially delivered; cannot switch.
 				return full.String(), usedModel, err
 			}
-			s.pool.MarkFailure(acc.ID, err.Error())
+			if !upstream.IsGlobalError(err) {
+				s.pool.MarkFailure(acc.ID, err.Error())
+			}
 			s.stats.Log("warn", fmt.Sprintf("model=%s retry: %v", m, err))
 		}
 	}

@@ -141,6 +141,7 @@
       <h1>账号池</h1>
       <div class="row">
         <button class="btn primary" onclick="startLogin()">🔓 登录获取账号</button>
+        <button class="btn ghost" onclick="clearCooldowns()">♻️ 清除全部冷却</button>
         <span id="loginStatus" class="muted" style="font-size:13px"></span>
       </div>
       <div class="row">
@@ -322,6 +323,7 @@ function addAccount(){
 function toggleAccount(id,enabled){ api(`/api/panel/accounts/${id}/toggle`,{method:'POST',body:JSON.stringify({enabled})}).then(loadAccounts).catch(e=>toast(e.message)); }
 function delAccount(id){ if(confirm('确认删除？')) api(`/api/panel/accounts/${id}`,{method:'DELETE'}).then(loadAccounts).catch(e=>toast(e.message)); }
 function refreshAccount(id){ toast('刷新中...'); api(`/api/panel/accounts/${id}/refresh`,{method:'POST'}).then(()=>{toast('已刷新');loadAccounts();}).catch(e=>toast('刷新失败: '+e.message)); }
+function clearCooldowns(){ api('/api/panel/accounts/clear-cooldown',{method:'POST'}).then(d=>{toast('已清除 '+(d.cleared||0)+' 个账号的冷却');loadAccounts();}).catch(e=>toast('清除失败: '+e.message)); }
 
 function openModal(title, html){ $('#modalTitle').textContent=title; $('#modalBody').innerHTML=html; $('#modal').style.display='flex'; }
 function closeModal(){ $('#modal').style.display='none'; }

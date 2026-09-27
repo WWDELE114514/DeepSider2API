@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -76,6 +77,24 @@ func (e *APIError) Error() string {
 		return fmt.Sprintf("deepsider %d (code %d): %s", e.Status, e.Code, e.Message)
 	}
 	return fmt.Sprintf("deepsider http %d: %s", e.Status, truncate(e.Body, 200))
+}
+
+// IsGlobalError reports whether err is a platform wide failure rather than an
+// account specific one. Signature (i-sign) rejections hit every account at
+// once, so they must not trip a single account's circuit breaker.
+func IsGlobalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return isGlobalCode(apiErr.Code)
+	}
+	return strings.Contains(err.Error(), "code 2002")
+}
+
+func isGlobalCode(code int) bool {
+	return code == 2002
 }
 
 func truncate(s string, n int) string {

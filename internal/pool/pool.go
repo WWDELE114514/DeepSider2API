@@ -297,6 +297,25 @@ func (p *Pool) MarkSuccess(id string) {
 	}
 }
 
+// ClearCooldowns resets failure counters and cooldowns for every account.
+func (p *Pool) ClearCooldowns() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for _, a := range p.accounts {
+		if a.FailCount != 0 || !a.CooldownUntil.IsZero() {
+			n++
+		}
+		a.FailCount = 0
+		a.LastError = ""
+		a.CooldownUntil = time.Time{}
+	}
+	if n > 0 {
+		_ = p.saveLocked()
+	}
+	return n
+}
+
 // MarkFailure increments the failure counter and trips a cooldown when the
 // breaker threshold is reached.
 func (p *Pool) MarkFailure(id string, errMsg string) {

@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/WWDELE114514/DeepSider2API/internal/upstream"
 )
 
 func (s *Server) imageBody(model, prompt, resolution, ratio string) map[string]interface{} {
@@ -87,7 +89,9 @@ func (s *Server) generateImages(ctx context.Context, model, prompt, resolution, 
 		}
 		result, err := s.upstream.GenerateImage(ctx, acc.Token, body)
 		if err != nil {
-			s.pool.MarkFailure(acc.ID, err.Error())
+			if !upstream.IsGlobalError(err) {
+				s.pool.MarkFailure(acc.ID, err.Error())
+			}
 			return nil, err
 		}
 		if len(result.URLs) == 0 {
@@ -118,7 +122,9 @@ func (s *Server) generateImages(ctx context.Context, model, prompt, resolution, 
 		} else {
 			lastErr = fmt.Errorf("no image url returned (model may have been blocked by safety filter)")
 		}
-		s.pool.MarkFailure(acc.ID, lastErr.Error())
+		if !upstream.IsGlobalError(lastErr) {
+			s.pool.MarkFailure(acc.ID, lastErr.Error())
+		}
 		s.stats.Log("warn", "image retry: "+lastErr.Error())
 	}
 	if lastErr == nil {

@@ -137,6 +137,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/panel/accounts/{id}/toggle", s.admin(s.handleToggleAccount))
 	s.mux.HandleFunc("DELETE /api/panel/accounts/{id}", s.admin(s.handleDeleteAccount))
 	s.mux.HandleFunc("POST /api/panel/accounts/{id}/refresh", s.admin(s.handleRefreshAccount))
+	s.mux.HandleFunc("POST /api/panel/accounts/clear-cooldown", s.admin(s.handleClearCooldowns))
 	s.mux.HandleFunc("GET /api/panel/invitation", s.admin(s.handleInvitation))
 
 	s.mux.HandleFunc("POST /api/panel/login/start", s.admin(s.handleLoginStart))
@@ -359,6 +360,11 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"ok": true})
+}
+
+func (s *Server) handleClearCooldowns(w http.ResponseWriter, r *http.Request) {
+	n := s.pool.ClearCooldowns()
+	writeJSON(w, map[string]interface{}{"ok": true, "cleared": n})
 }
 
 func (s *Server) handleRefreshAccount(w http.ResponseWriter, r *http.Request) {
