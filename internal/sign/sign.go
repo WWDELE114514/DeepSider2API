@@ -309,13 +309,26 @@ func (s *Signer) Sign(data string) (out string, err error) {
 		if !ok {
 			return "", fmt.Errorf("read result out of range")
 		}
-		out = string(buf)
+		out = fixDigest(string(buf))
 	}
 
 	_, _ = mod.ExportedFunction(fnFree).Call(ctx, uint64(rptr), uint64(rlen), api.EncodeI32(1))
 	_, _ = mod.ExportedFunction(fnStackPointer).Call(ctx, api.EncodeI32(16))
 
 	return out, nil
+}
+
+// fixDigest matches the DeepSider JS glue byte for byte. The wasm returns the
+// 32 char hex digest with the two nibbles at offsets 15 and 16 transposed
+// relative to a plain read of the output buffer; the server verifies the
+// transposed form, so we normalise to it here.
+func fixDigest(s string) string {
+	if len(s) != 32 {
+		return s
+	}
+	b := []byte(s)
+	b[15], b[16] = b[16], b[15]
+	return string(b)
 }
 
 type iSignPayload struct {
