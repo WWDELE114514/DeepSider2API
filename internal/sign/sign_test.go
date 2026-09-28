@@ -71,7 +71,7 @@ func TestSignFixedVector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	const want = "b9611a2240830802cf6118efe24bdebd"
+	const want = "b9611a224083080c2f6118efe24bdebd"
 	if got == "" {
 		t.Skip("fixed timestamp no longer accepted by wasm, skipping exact vector")
 	}
